@@ -1,11 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, Mic, MicOff, Quote, Search } from 'lucide-react'
+import { ArrowRight, Mic, MicOff } from 'lucide-react'
 
 const EXAMPLES = [
   'Find me a direct flight from Bengaluru to Mumbai under ₹8,000.',
   'Cheapest flight from Mumbai to Bengaluru, I do not mind a stop.',
   'Morning flight from Bengaluru to Delhi, budget ₹7,000.',
   'Fastest direct flight from Delhi to Mumbai in the evening.',
+]
+
+const FACTS: Array<{ label: string; text: string }> = [
+  {
+    label: 'Scope',
+    text: 'This prototype demonstrates one task from start to finish: finding and booking a flight.',
+  },
+  {
+    label: 'Data',
+    text: 'Every flight, price and reference is simulated. Nothing is booked and no payment is taken.',
+  },
+  {
+    label: 'Tools',
+    text: 'SIGHTLINE works alongside your screen reader and other assistive tools. It does not replace them.',
+  },
 ]
 
 interface SpeechRecognitionLike {
@@ -48,7 +63,9 @@ export default function TaskEntry({ initialText, onSubmit }: Props) {
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (text.trim().length < 3) {
-      setError('Please describe the flight you need, for example: a direct flight from Bengaluru to Mumbai under 8,000 rupees.')
+      setError(
+        'Please describe the flight you need, for example: a direct flight from Bengaluru to Mumbai under 8,000 rupees.',
+      )
       inputRef.current?.focus()
       return
     }
@@ -96,87 +113,114 @@ export default function TaskEntry({ initialText, onSubmit }: Props) {
   }
 
   return (
-    <>
-      <section className="card stack" aria-labelledby="entry-heading">
-        <p className="eyebrow">Step 1 of 5 &middot; Your request</p>
-        <h1 id="entry-heading">Tell SIGHTLINE what you need, in your own words.</h1>
+    <section className="hero" aria-labelledby="entry-heading">
+      <div className="hero__lead">
+        <p className="eyebrow">Accessibility companion</p>
+
+        <h1 className="display hero__display" id="entry-heading">
+          <span>The web,</span>
+          <span>without the</span>
+          <span className="serif">barriers.</span>
+        </h1>
+
         <p className="lede">
-          SIGHTLINE turns a complicated booking website into one guided question at a time. You say what you want,
-          it explains the options in plain language, and you stay in control of every decision.
+          SIGHTLINE helps people with visual impairments make sense of complex online experiences. It reads a task
+          back to you in plain language, explains the options that matter, and keeps every consequential decision in
+          your hands.
         </p>
-        <p className="field__hint">
-          SIGHTLINE works alongside your screen reader and other assistive tools. It does not replace them.
-        </p>
-      </section>
 
-      <section className="card stack" aria-labelledby="request-heading">
-        <h2 id="request-heading">Describe your flight</h2>
-
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="stack">
-            <div className="field">
-              <label className="field__label" htmlFor="request-input">
-                What flight do you need?
-              </label>
-              <p className="field__hint" id="request-hint">
-                Include where you are flying from and to. You can also add a budget, a time of day, or say
-                &ldquo;direct&rdquo;. Anything you leave out gets a sensible default that you can change on the next
-                screen.
-              </p>
-              <textarea
-                id="request-input"
-                ref={inputRef}
-                className="textarea"
-                value={text}
-                onChange={(event) => setText(event.target.value)}
-                aria-describedby={error ? 'request-hint request-error' : 'request-hint'}
-                aria-invalid={error ? 'true' : undefined}
-                placeholder="Find me a direct flight from Bengaluru to Mumbai under 8,000 rupees"
-                rows={3}
-              />
-              {error && (
-                <p className="field__error" id="request-error">
-                  <span aria-hidden="true">&#9888;</span> {error}
-                </p>
-              )}
+        <dl className="hero__meta">
+          {FACTS.map((fact) => (
+            <div className="hero__metarow" key={fact.label}>
+              <dt className="mono">{fact.label}</dt>
+              <dd style={{ margin: 0 }}>
+                <p>{fact.text}</p>
+              </dd>
             </div>
+          ))}
+        </dl>
+      </div>
 
-            <div className="actions">
-              <button type="submit" className="btn btn-primary">
-                <Search size={20} aria-hidden="true" />
-                Understand my request
-                <ArrowRight size={20} aria-hidden="true" />
-              </button>
-              {voiceSupported && (
-                <button type="button" className="btn btn-secondary" onClick={toggleVoice} aria-pressed={listening}>
-                  {listening ? <MicOff size={20} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}
-                  {listening ? 'Stop listening' : 'Speak instead of typing'}
-                </button>
-              )}
-            </div>
-            <p aria-live="polite" className="field__hint">
-              {voiceNote}
+      <div className="hero__panel">
+        <div className="hero__panel-head">
+          <h2 className="mono mono--ivory" style={{ fontWeight: 400 }}>
+            Describe your flight
+          </h2>
+          <p className="mono num">01 / 05</p>
+        </div>
+
+        <form onSubmit={handleSubmit} noValidate className="stack">
+          <div className="field">
+            <label className="field__label" htmlFor="request-input">
+              What do you need?
+            </label>
+            <p className="field__hint" id="request-hint">
+              Say it in your own words. Include where you are flying from and to; you can add a budget, a time of
+              day, or the word &ldquo;direct&rdquo;. Anything you leave out gets a sensible default that you can
+              change on the next screen.
             </p>
+            <textarea
+              id="request-input"
+              ref={inputRef}
+              className="textarea"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              aria-describedby={error ? 'request-hint request-error' : 'request-hint'}
+              aria-invalid={error ? 'true' : undefined}
+              placeholder="A direct flight from Bengaluru to Mumbai under 8,000 rupees"
+              rows={3}
+            />
+            {error && (
+              <p className="field__error" id="request-error">
+                <span className="mono" style={{ color: 'inherit' }}>
+                  Error
+                </span>
+                {error}
+              </p>
+            )}
           </div>
-        </form>
-      </section>
 
-      <section className="card stack" aria-labelledby="examples-heading">
-        <h2 id="examples-heading">Or start from an example</h2>
-        <p className="field__hint">
-          Choosing an example fills in the box above. You can edit it before searching.
+          <div className="actions">
+            <button type="submit" className="btn btn--primary">
+              Understand my request
+              <ArrowRight size={17} aria-hidden="true" />
+            </button>
+            {voiceSupported && (
+              <button type="button" className="btn btn--secondary" onClick={toggleVoice} aria-pressed={listening}>
+                {listening ? <MicOff size={17} aria-hidden="true" /> : <Mic size={17} aria-hidden="true" />}
+                {listening ? 'Stop listening' : 'Speak instead'}
+              </button>
+            )}
+          </div>
+
+          <p aria-live="polite" className="voice-note">
+            {listening && <span className="listening-dot" aria-hidden="true" />}
+            {voiceNote}
+          </p>
+        </form>
+
+        <hr className="rule" style={{ margin: '1.5rem 0 1.1rem' }} />
+
+        <h2 className="mono assist__section-title" style={{ marginBottom: '0.35rem' }}>
+          Suggested requests
+        </h2>
+        <p className="field__hint" style={{ marginBottom: '0.35rem' }}>
+          Choosing one fills in the box above. You can edit it before searching.
         </p>
         <ul className="examples">
-          {EXAMPLES.map((example) => (
+          {EXAMPLES.map((example, index) => (
             <li key={example}>
-              <button type="button" className="example-btn" onClick={() => applyExample(example)}>
-                <Quote size={18} aria-hidden="true" color="#0a6a5b" style={{ flex: 'none' }} />
+              <button type="button" className="example" onClick={() => applyExample(example)}>
+                <span className="example__num num" aria-hidden="true">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
                 <span>{example}</span>
+                <ArrowRight size={15} className="example__arrow" aria-hidden="true" />
               </button>
             </li>
           ))}
         </ul>
-      </section>
-    </>
+      </div>
+    </section>
   )
 }

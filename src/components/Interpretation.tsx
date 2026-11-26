@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Info } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Info, Plane } from 'lucide-react'
 import { AIRPORTS, cityName } from '../data/airports'
 import { AIRLINE_NAMES, SUPPORTED_ROUTES } from '../data/flights'
 import { rupees } from '../lib/format'
@@ -32,21 +32,31 @@ export default function Interpretation({ request, onChange, onConfirm, onBack }:
     onChange({ ...request, ...patch, assumed: request.assumed.filter((key) => !touched.includes(key)) })
   }
 
+  const assumedChip = (key: string) =>
+    assumed.has(key) ? <span className="chip">Assumed</span> : null
+
   return (
     <>
-      <section className="card stack" aria-labelledby="interpret-heading">
-        <p className="eyebrow">Step 1 of 5 &middot; Your request</p>
-        <h1 id="interpret-heading">Here is what SIGHTLINE understood</h1>
+      <section className="band" aria-labelledby="interpret-heading">
+        <p className="eyebrow">
+          Step 01 / 05 <span aria-hidden="true">&mdash;</span> Interpretation
+        </p>
+        <h1 className="display--md" id="interpret-heading">
+          Here is what we <span className="serif">understood</span>
+        </h1>
+
         <p className="quote">
           <span className="visually-hidden">You asked: </span>&ldquo;{request.rawText}&rdquo;
         </p>
+
         <p className="lede">
           Your words were read with fixed rules, not a guess. Check each detail below and change anything that is
           wrong before any flights are shown.
         </p>
+
         {assumed.size > 0 && (
-          <p className="notice">
-            <Info size={20} aria-hidden="true" className="notice__icon" />
+          <p className="note">
+            <Info size={17} aria-hidden="true" className="note__icon" />
             <span>
               You did not mention{' '}
               {[...assumed].map((key, index) => (
@@ -55,19 +65,45 @@ export default function Interpretation({ request, onChange, onConfirm, onBack }:
                   <strong>{key}</strong>
                 </span>
               ))}
-              , so a default was filled in. Fields marked &ldquo;assumed&rdquo; below are the ones to check first.
+              , so a default was filled in. The fields marked <strong>Assumed</strong> below are the ones to check
+              first.
             </span>
           </p>
         )}
       </section>
 
-      <section className="card stack" aria-labelledby="edit-heading">
-        <h2 id="edit-heading">Check and correct the details</h2>
+      <section className="panel" aria-labelledby="edit-heading">
+        <div className="panel__head">
+          <h2 id="edit-heading">Check and correct the details</h2>
+          <p className="mono">Editable</p>
+        </div>
+
+        <div className="route" aria-hidden="true">
+          <div className="route__node">
+            <p className="route__code num">{request.origin}</p>
+            <p className="mono">{cityName(request.origin)}</p>
+          </div>
+          <div className="route__link">
+            <span className="route__line" />
+            <Plane size={15} />
+            <span className="route__line" />
+          </div>
+          <div className="route__node route__node--end">
+            <p className="route__code num">{request.destination}</p>
+            <p className="mono">{cityName(request.destination)}</p>
+          </div>
+        </div>
+        <p className="visually-hidden">
+          Flying from {cityName(request.origin)} ({request.origin}) to {cityName(request.destination)} (
+          {request.destination}).
+        </p>
+
+        <hr className="rule" style={{ margin: '1.75rem 0' }} />
 
         <div className="field-grid">
           <div className="field">
             <label className="field__label" htmlFor="origin">
-              Flying from {assumed.has('origin') && <span className="tag">Assumed</span>}
+              Flying from {assumedChip('origin')}
             </label>
             <select
               id="origin"
@@ -85,7 +121,7 @@ export default function Interpretation({ request, onChange, onConfirm, onBack }:
 
           <div className="field">
             <label className="field__label" htmlFor="destination">
-              Flying to {assumed.has('destination') && <span className="tag">Assumed</span>}
+              Flying to {assumedChip('destination')}
             </label>
             <select
               id="destination"
@@ -103,14 +139,14 @@ export default function Interpretation({ request, onChange, onConfirm, onBack }:
 
           <div className="field">
             <label className="field__label" htmlFor="budget">
-              Most you want to pay, in rupees {assumed.has('budget') && <span className="tag">No limit set</span>}
+              Most you want to pay {assumed.has('budget') && <span className="chip">No limit set</span>}
             </label>
             <p className="field__hint" id="budget-hint">
-              Leave this empty to see every fare on the route.
+              In rupees. Leave this empty to see every fare on the route.
             </p>
             <input
               id="budget"
-              className="input"
+              className="input num"
               type="number"
               inputMode="numeric"
               min={1000}
@@ -179,7 +215,7 @@ export default function Interpretation({ request, onChange, onConfirm, onBack }:
           </div>
         </div>
 
-        <div className="checkbox-row">
+        <div className="check" style={{ marginTop: '1.5rem' }}>
           <input
             id="directOnly"
             type="checkbox"
@@ -187,35 +223,44 @@ export default function Interpretation({ request, onChange, onConfirm, onBack }:
             onChange={(event) => update({ directOnly: event.target.checked })}
             aria-describedby="direct-hint"
           />
-          <div>
+          <div className="stack--xs stack">
             <label className="field__label" htmlFor="directOnly">
               Direct flights only
             </label>
             <p className="field__hint" id="direct-hint">
-              A direct flight goes straight there without changing planes. Turning this on hides flights with a stop.
+              A direct flight goes straight there without changing planes. Turning this on hides flights with a
+              stop.
             </p>
           </div>
         </div>
 
-        <p className="field__hint">
-          Current search: {cityName(request.origin)} to {cityName(request.destination)},{' '}
-          {request.budget !== null ? `up to ${rupees(request.budget)}` : 'no price limit'},{' '}
-          {request.directOnly ? 'direct flights only' : 'stops allowed'}.
+        <hr className="rule" style={{ margin: '1.75rem 0 1.25rem' }} />
+
+        <p className="mono" style={{ marginBottom: '1.25rem' }}>
+          Searching <span className="mono--ivory">{cityName(request.origin)}</span>{' '}
+          <span aria-hidden="true">&rarr;</span>{' '}
+          <span className="mono--ivory">{cityName(request.destination)}</span>
+          {' · '}
+          <span className="mono--ivory">
+            {request.budget !== null ? `up to ${rupees(request.budget)}` : 'no price limit'}
+          </span>
+          {' · '}
+          <span className="mono--ivory">{request.directOnly ? 'direct only' : 'stops allowed'}</span>
         </p>
 
         <div className="actions">
-          <button type="button" className="btn btn-primary" onClick={onConfirm}>
+          <button type="button" className="btn btn--primary" onClick={onConfirm}>
             Show matching flights
-            <ArrowRight size={20} aria-hidden="true" />
+            <ArrowRight size={17} aria-hidden="true" />
           </button>
-          <button type="button" className="btn btn-secondary" onClick={onBack}>
-            <ArrowLeft size={20} aria-hidden="true" />
+          <button type="button" className="btn btn--secondary" onClick={onBack}>
+            <ArrowLeft size={17} aria-hidden="true" />
             Change my request
           </button>
         </div>
 
-        <p className="field__hint">
-          This demo carries simulated flights for these routes only:{' '}
+        <p className="field__hint" style={{ marginTop: '1.25rem' }}>
+          This prototype carries simulated flights for these routes only:{' '}
           {SUPPORTED_ROUTES.map(([from, to]) => `${cityName(from)} to ${cityName(to)}`).join('; ')}.
         </p>
       </section>

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, CircleAlert } from 'lucide-react'
+import { cityName } from '../data/airports'
 import { clockToHuman, rupees } from '../lib/format'
 import type { Passenger, RankedFlight } from '../types'
 
@@ -44,6 +45,7 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({})
   const [showSummary, setShowSummary] = useState(false)
   const summaryRef = useRef<HTMLDivElement>(null)
+  const { flight: f } = flight
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -61,7 +63,10 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
   const field = (key: FieldKey, type: string, hint: string, autoComplete: string) => (
     <div className="field">
       <label className="field__label" htmlFor={key}>
-        {FIELD_LABELS[key]} <span aria-hidden="true">*</span>
+        {FIELD_LABELS[key]}
+        <span className="chip" aria-hidden="true">
+          Required
+        </span>
         <span className="visually-hidden">(required)</span>
       </label>
       <p className="field__hint" id={`${key}-hint`}>
@@ -83,7 +88,7 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
       />
       {errors[key] && (
         <p className="field__error" id={`${key}-error`}>
-          <CircleAlert size={18} aria-hidden="true" style={{ flex: 'none', marginTop: '0.2rem' }} />
+          <CircleAlert size={15} aria-hidden="true" />
           {errors[key]}
         </p>
       )}
@@ -94,57 +99,90 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
 
   return (
     <>
-      <section className="card stack" aria-labelledby="passenger-heading">
-        <p className="eyebrow">Step 3 of 5 &middot; Passenger details</p>
-        <h1 id="passenger-heading">Who is travelling?</h1>
+      <section className="band" aria-labelledby="passenger-heading">
+        <p className="eyebrow">
+          Step 03 / 05 <span aria-hidden="true">&mdash;</span> Passenger details
+        </p>
+        <h1 className="display--md" id="passenger-heading">
+          Who is <span className="serif">travelling?</span>
+        </h1>
         <p className="lede">
-          These details would go on the ticket. In this demo they stay in your browser and are not sent anywhere.
+          These details would go on the ticket. In this prototype they stay in your browser for this session and are
+          not sent anywhere.
         </p>
-        <p className="field__hint">
-          Chosen flight: {flight.flight.airline} {flight.flight.flightNumber}, departing{' '}
-          {clockToHuman(flight.flight.departTime)}, {rupees(flight.flight.price)}.
-        </p>
+
+        <div className="chosen">
+          <div className="chosen__block">
+            <p className="mono">Chosen flight</p>
+            <p className="chosen__value">
+              {f.airline} {f.flightNumber}
+            </p>
+          </div>
+          <div className="chosen__block">
+            <p className="mono">Route</p>
+            <p className="chosen__value">
+              {cityName(f.from)} <span aria-hidden="true">&rarr;</span> {cityName(f.to)}
+            </p>
+          </div>
+          <div className="chosen__block">
+            <p className="mono">Departs</p>
+            <p className="chosen__value">{clockToHuman(f.departTime)}</p>
+          </div>
+          <div className="chosen__block chosen__price">
+            <p className="mono">Simulated fare</p>
+            <p className="chosen__value">{rupees(f.price)}</p>
+          </div>
+        </div>
       </section>
 
-      <section className="card stack" aria-labelledby="form-heading">
-        <h2 id="form-heading">Passenger information</h2>
+      <section className="panel" aria-labelledby="form-heading">
+        <div className="panel__head">
+          <h2 id="form-heading">Passenger information</h2>
+          <p className="mono">3 fields, all required</p>
+        </div>
 
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="stack">
-            {showSummary && errorEntries.length > 0 && (
-              <div className="error-summary" role="alert" tabIndex={-1} ref={summaryRef}>
-                <strong>
-                  {errorEntries.length === 1
-                    ? 'One detail needs your attention:'
-                    : `${errorEntries.length} details need your attention:`}
-                </strong>
-                <ul>
-                  {errorEntries.map(([key, message]) => (
-                    <li key={key}>
-                      <a href={`#${key}`}>{FIELD_LABELS[key]}</a>: {message}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+        <form onSubmit={handleSubmit} noValidate className="stack stack--lg">
+          {showSummary && errorEntries.length > 0 && (
+            <div className="error-summary" role="alert" tabIndex={-1} ref={summaryRef}>
+              <strong>
+                <CircleAlert size={15} aria-hidden="true" />
+                {errorEntries.length === 1
+                  ? 'One detail needs your attention'
+                  : `${errorEntries.length} details need your attention`}
+              </strong>
+              <ul>
+                {errorEntries.map(([key, message]) => (
+                  <li key={key}>
+                    <a href={`#${key}`}>{FIELD_LABELS[key]}</a>: {message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="field-grid">
+            {field(
+              'fullName',
+              'text',
+              'Use the name exactly as it appears on the identity document you will travel with.',
+              'name',
             )}
-
-            <p className="field__hint">All three fields are required.</p>
-
-            {field('fullName', 'text', 'Use the name exactly as it appears on the identity document you will travel with.', 'name')}
             {field('email', 'email', 'For example: asha.menon@example.com. Used for booking updates only.', 'email')}
             {field('phone', 'tel', 'Ten digits, or with a country code such as +91 9876543210.', 'tel')}
+          </div>
 
+          <div>
             <div className="actions">
-              <button type="submit" className="btn btn-primary">
+              <button type="submit" className="btn btn--primary">
                 Review booking
-                <ArrowRight size={20} aria-hidden="true" />
+                <ArrowRight size={17} aria-hidden="true" />
               </button>
-              <button type="button" className="btn btn-secondary" onClick={onBack}>
-                <ArrowLeft size={20} aria-hidden="true" />
+              <button type="button" className="btn btn--secondary" onClick={onBack}>
+                <ArrowLeft size={17} aria-hidden="true" />
                 Back to flights
               </button>
             </div>
-            <p className="field__hint">
+            <p className="field__hint" style={{ marginTop: '1.25rem' }}>
               Nothing is booked yet. The next screen shows a summary you can check before confirming.
             </p>
           </div>

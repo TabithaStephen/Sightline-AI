@@ -11,127 +11,109 @@ interface Props {
   onEditPassenger: () => void
 }
 
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="srow">
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  )
+}
+
 export default function ReviewBooking({ flight, passenger, onConfirm, onEditFlight, onEditPassenger }: Props) {
   const { flight: f } = flight
 
   return (
     <>
-      <section className="card stack" aria-labelledby="review-heading">
-        <p className="eyebrow">Step 4 of 5 &middot; Review</p>
-        <h1 id="review-heading">Check your booking before confirming</h1>
+      <section className="band" aria-labelledby="review-heading">
+        <p className="eyebrow">
+          Step 04 / 05 <span aria-hidden="true">&mdash;</span> Review
+        </p>
+        <h1 className="display--md" id="review-heading">
+          Check it before you <span className="serif">confirm</span>
+        </h1>
         <p className="lede">
           Nothing has been booked yet. Read the summary below, change anything that is wrong, and confirm only when
           you are ready.
         </p>
       </section>
 
-      <section className="card stack" aria-labelledby="summary-heading">
-        <h2 id="summary-heading">Booking summary</h2>
+      <section className="panel" aria-labelledby="summary-heading">
+        <div className="panel__head">
+          <h2 id="summary-heading">Booking summary</h2>
+          <p className="mono">Simulated</p>
+        </div>
 
-        <div className="review-grid">
-          <div className="review-section">
-            <div className="review-section__head">
+        <div className="review">
+          <div className="review__section">
+            <div className="review__head">
               <h3>Flight</h3>
-              <button type="button" className="btn btn-quiet" onClick={onEditFlight}>
-                <Pencil size={18} aria-hidden="true" />
+              <button type="button" className="btn btn--quiet" onClick={onEditFlight}>
+                <Pencil size={13} aria-hidden="true" />
                 Change flight
               </button>
             </div>
-            <dl className="summary-list summary-list--cols">
-              <div className="summary-item">
-                <dt className="summary-item__label">Airline</dt>
-                <dd className="summary-item__value">{f.airline}</dd>
-              </div>
-              <div className="summary-item">
-                <dt className="summary-item__label">Flight number</dt>
-                <dd className="summary-item__value">{f.flightNumber}</dd>
-              </div>
-              <div className="summary-item">
-                <dt className="summary-item__label">Route</dt>
-                <dd className="summary-item__value">
-                  {cityName(f.from)} ({f.from}) to {cityName(f.to)} ({f.to})
-                </dd>
-              </div>
-              <div className="summary-item">
-                <dt className="summary-item__label">Departs</dt>
-                <dd className="summary-item__value">{clockToHuman(f.departTime)}</dd>
-              </div>
-              <div className="summary-item">
-                <dt className="summary-item__label">Arrives</dt>
-                <dd className="summary-item__value">
-                  {clockToHuman(f.arriveTime)}
-                  {f.arrivesNextDay ? ' (next day)' : ''}
-                </dd>
-              </div>
-              <div className="summary-item">
-                <dt className="summary-item__label">Journey time</dt>
-                <dd className="summary-item__value">{minutesToHuman(flight.durationMinutes)}</dd>
-              </div>
-              <div className="summary-item">
-                <dt className="summary-item__label">Stops</dt>
-                <dd className="summary-item__value">
-                  {stopsLabel(f.stops)}
-                  {f.stops > 0 && ` via ${f.via.map(cityName).join(', ')}`}
-                </dd>
-              </div>
-              <div className="summary-item">
-                <dt className="summary-item__label">Baggage</dt>
-                <dd className="summary-item__value">
-                  {f.cabinBag}. {f.checkedBag}.
-                </dd>
-              </div>
-              <div className="summary-item">
-                <dt className="summary-item__label">Fare type</dt>
-                <dd className="summary-item__value">{f.refundable ? 'Refundable' : 'Non-refundable'}</dd>
-              </div>
+            <dl className="srows">
+              <Row label="Airline">{f.airline}</Row>
+              <Row label="Flight number">
+                <span className="num">{f.flightNumber}</span>
+              </Row>
+              <Row label="Route">
+                {cityName(f.from)} ({f.from}) to {cityName(f.to)} ({f.to})
+              </Row>
+              <Row label="Departs">{clockToHuman(f.departTime)}</Row>
+              <Row label="Arrives">
+                {clockToHuman(f.arriveTime)}
+                {f.arrivesNextDay ? ' (next day)' : ''}
+              </Row>
+              <Row label="Journey time">{minutesToHuman(flight.durationMinutes)}</Row>
+              <Row label="Stops">
+                {stopsLabel(f.stops)}
+                {f.stops > 0 && ` via ${f.via.map(cityName).join(', ')}`}
+              </Row>
+              <Row label="Baggage">
+                {f.cabinBag}. {f.checkedBag}.
+              </Row>
+              <Row label="Fare type">{f.refundable ? 'Refundable' : 'Non-refundable'}</Row>
             </dl>
           </div>
 
-          <div className="review-section">
-            <div className="review-section__head">
+          <div className="review__section">
+            <div className="review__head">
               <h3>Passenger</h3>
-              <button type="button" className="btn btn-quiet" onClick={onEditPassenger}>
-                <Pencil size={18} aria-hidden="true" />
+              <button type="button" className="btn btn--quiet" onClick={onEditPassenger}>
+                <Pencil size={13} aria-hidden="true" />
                 Change passenger details
               </button>
             </div>
-            <dl className="summary-list summary-list--cols">
-              <div className="summary-item">
-                <dt className="summary-item__label">Full name</dt>
-                <dd className="summary-item__value">{passenger.fullName}</dd>
-              </div>
-              <div className="summary-item">
-                <dt className="summary-item__label">Email address</dt>
-                <dd className="summary-item__value">{passenger.email}</dd>
-              </div>
-              <div className="summary-item">
-                <dt className="summary-item__label">Phone number</dt>
-                <dd className="summary-item__value">{passenger.phone}</dd>
-              </div>
+            <dl className="srows">
+              <Row label="Full name">{passenger.fullName}</Row>
+              <Row label="Email address">{passenger.email}</Row>
+              <Row label="Phone number">{passenger.phone}</Row>
             </dl>
           </div>
         </div>
 
-        <p className="total-row">
-          <span>Total for 1 passenger</span>
-          <span>{rupees(f.price)}</span>
-        </p>
+        <div className="total">
+          <p className="mono">Total for 1 passenger</p>
+          <p className="total__value">{rupees(f.price)}</p>
+        </div>
 
-        <p className="notice">
-          <CircleAlert size={20} aria-hidden="true" className="notice__icon" />
+        <p className="note note--alert" style={{ marginTop: '1.75rem' }}>
+          <CircleAlert size={17} aria-hidden="true" className="note__icon" />
           <span>
-            <strong>This is a demo.</strong> Confirming creates a simulated booking only. No airline is contacted, no
-            seat is held, and no payment is taken. You will never be asked for card details.
+            <strong>This is a demonstration.</strong> Confirming creates a simulated booking only. No airline is
+            contacted, no seat is held, and no payment is taken. You will never be asked for card details.
           </span>
         </p>
 
-        <div className="actions">
-          <button type="button" className="btn btn-primary" onClick={onConfirm}>
-            <ShieldCheck size={20} aria-hidden="true" />
+        <div className="actions" style={{ marginTop: '1.75rem' }}>
+          <button type="button" className="btn btn--primary" onClick={onConfirm}>
+            <ShieldCheck size={17} aria-hidden="true" />
             Confirm demo booking
           </button>
-          <button type="button" className="btn btn-secondary" onClick={onEditPassenger}>
-            <ArrowLeft size={20} aria-hidden="true" />
+          <button type="button" className="btn btn--secondary" onClick={onEditPassenger}>
+            <ArrowLeft size={17} aria-hidden="true" />
             Back to passenger details
           </button>
         </div>

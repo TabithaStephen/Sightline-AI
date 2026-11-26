@@ -46,8 +46,8 @@ A **Guided help** panel sits beside every step. Its content is generated from li
 - Labelled form fields with hints, `aria-invalid` and linked error messages
 - Status changes announced through a polite live region
 - A working text-size control (standard / large / extra large), remembered between visits
-- Status never conveyed by colour alone — every badge carries an icon and a text label
-- Dark-on-ivory palette with strong contrast and large touch targets
+- Status never conveyed by colour alone — every tag, badge and best-in-row marker carries a written label
+- Dark editorial palette (obsidian surfaces, warm ivory text, champagne accent) with strong contrast and large touch targets
 - `prefers-reduced-motion` respected
 
 ## Technology stack
@@ -56,6 +56,7 @@ A **Guided help** panel sits beside every step. Its content is generated from li
 - Vite
 - lucide-react for icons
 - Plain CSS with design tokens
+- Inter Tight, Instrument Serif and JetBrains Mono from Google Fonts, with full system fallbacks so the app still renders correctly offline
 
 No backend, no database, no authentication, no payment processing and no external APIs. All parsing, filtering and ranking happens locally and deterministically.
 

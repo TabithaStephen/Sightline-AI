@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Eye, Type } from 'lucide-react'
+import { RotateCcw, Type } from 'lucide-react'
 import AssistPanel from './components/AssistPanel'
 import Confirmation from './components/Confirmation'
 import FlightResults from './components/FlightResults'
@@ -21,6 +21,15 @@ const TEXT_SIZES: Array<{ value: TextSize; label: string; short: string }> = [
   { value: 'large', label: 'Large text size', short: 'A+' },
   { value: 'xlarge', label: 'Extra large text size', short: 'A++' },
 ]
+
+const STEP_LABELS: Record<Step, string> = {
+  entry: 'Your request',
+  interpret: 'Your request',
+  results: 'Choose a flight',
+  passenger: 'Passenger details',
+  review: 'Review',
+  confirmation: 'Confirmed',
+}
 
 const EMPTY_PASSENGER: Passenger = { fullName: '', email: '', phone: '' }
 
@@ -140,7 +149,7 @@ export default function App() {
       const next = [...current, id]
       setAnnouncement(
         next.length >= 2
-          ? `Comparing ${next.length} flights. The comparison table is above the flight list.`
+          ? `Comparing ${next.length} flights. The comparison is above the flight list.`
           : 'Flight added to the comparison. Add one more to see them side by side.',
       )
       return next
@@ -165,63 +174,98 @@ export default function App() {
     setAnnouncement('Starting a new search. Your previous demo booking has been cleared.')
   }
 
+  const isEntry = step === 'entry'
+
   return (
     <div className="app">
       <a className="skip-link" href="#main">
         Skip to main content
       </a>
 
-      <header className="site-header">
-        <div className="site-header__inner">
-          <div className="brand">
-            <span className="brand__mark" aria-hidden="true">
-              <Eye size={22} />
-            </span>
-            <div>
-              <p className="brand__name">Sightline</p>
-              <p className="brand__tagline">The web, on your terms.</p>
-            </div>
+      <header className="masthead">
+        <div className="masthead__inner wrap">
+          <a className="wordmark" href="#main">
+            <span className="wordmark__name">Sightline</span>
+            <span className="wordmark__dot" aria-hidden="true" />
+          </a>
+
+          <div className="masthead__meta">
+            <span className="masthead__divider" aria-hidden="true" />
+            <p className="mono masthead__long">
+              Prototype 01 <span aria-hidden="true">&mdash;</span> Guided flight booking
+            </p>
+            <span className="masthead__divider masthead__long" aria-hidden="true" />
+            <p className="mono mono--accent">{STEP_LABELS[step]}</p>
           </div>
 
-          <div className="text-size">
-            <span className="text-size__label" id="text-size-label">
-              <Type size={18} aria-hidden="true" />
-              Text size
-            </span>
-            <div className="text-size__group" role="group" aria-labelledby="text-size-label">
-              {TEXT_SIZES.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className="text-size__btn"
-                  aria-pressed={textSize === option.value}
-                  onClick={() => {
-                    setTextSize(option.value)
-                    setAnnouncement(`${option.label} applied.`)
-                  }}
-                >
-                  <span aria-hidden="true">{option.short}</span>
-                  <span className="visually-hidden">{option.label}</span>
-                </button>
-              ))}
+          <div className="masthead__tools">
+            <div className="textsize">
+              <span className="mono textsize__label" id="text-size-label">
+                <Type size={14} aria-hidden="true" />
+                Text
+              </span>
+              <div className="textsize__group" role="group" aria-labelledby="text-size-label">
+                {TEXT_SIZES.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className="textsize__btn"
+                    aria-pressed={textSize === option.value}
+                    onClick={() => {
+                      setTextSize(option.value)
+                      setAnnouncement(`${option.label} applied.`)
+                    }}
+                  >
+                    <span aria-hidden="true">{option.short}</span>
+                    <span className="visually-hidden">{option.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {!isEntry && (
+              <button type="button" className="btn btn--quiet" onClick={handleRestart}>
+                <RotateCcw size={14} aria-hidden="true" />
+                Start over
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      <p className="demo-banner">
-        <span className="demo-banner__inner">
-          <span aria-hidden="true">&#9888;</span>
-          Demonstration only: all flights, prices and bookings on this site are simulated. No real reservation or
-          payment is ever made.
-        </span>
-      </p>
+      <div className="sim-strip">
+        <p className="sim-strip__inner wrap">
+          <span className="sim-strip__dot" aria-hidden="true" />
+          <span className="mono">
+            Simulated data <span aria-hidden="true">&mdash;</span> no airline is contacted, no seat is held and no
+            payment is ever taken
+          </span>
+        </p>
+      </div>
 
-      <ProgressSteps step={step} />
+      {!isEntry && (
+        <div className="rail">
+          <div className="wrap">
+            <ProgressSteps step={step} />
+          </div>
+        </div>
+      )}
 
-      <div className="layout">
-        <main className="column" id="main" ref={mainRef} tabIndex={-1} aria-label="Flight booking assistant">
-          {step === 'entry' && <TaskEntry initialText={requestText} onSubmit={handleRequest} />}
+      <div className={isEntry ? 'shell shell--full' : 'shell'}>
+        <main
+          key={step}
+          className={isEntry ? 'column column--full' : 'column'}
+          id="main"
+          ref={mainRef}
+          tabIndex={-1}
+          aria-label="Guided flight booking"
+        >
+          {step === 'entry' && (
+            <>
+              <TaskEntry initialText={requestText} onSubmit={handleRequest} />
+              <AssistPanel content={assist} inline />
+            </>
+          )}
 
           {step === 'interpret' && request && (
             <Interpretation
@@ -281,14 +325,19 @@ export default function App() {
           )}
 
           {(step === 'passenger' || step === 'review' || step === 'confirmation') && !selected && (
-            <section className="card stack">
-              <h1>Your flight selection was cleared</h1>
+            <section className="band" aria-labelledby="cleared-heading">
+              <p className="eyebrow">Selection cleared</p>
+              <h1 id="cleared-heading" className="display--md">
+                Your flight selection
+                <br />
+                is no longer <span className="serif">available</span>
+              </h1>
               <p className="lede">
-                The chosen flight is no longer in your results, which can happen if the search was changed. Start
+                The chosen flight is not in your current results, which can happen if the search was changed. Start
                 again to pick a flight.
               </p>
               <div className="actions">
-                <button type="button" className="btn btn-primary" onClick={handleRestart}>
+                <button type="button" className="btn btn--primary" onClick={handleRestart}>
                   Start a new search
                 </button>
               </div>
@@ -296,18 +345,25 @@ export default function App() {
           )}
         </main>
 
-        <AssistPanel content={assist} />
+        {!isEntry && <AssistPanel content={assist} />}
       </div>
 
       <p aria-live="polite" role="status" className="visually-hidden">
         {announcement}
       </p>
 
-      <footer className="site-footer">
-        <p>
-          SIGHTLINE is an accessibility-focused task companion built as a prototype. It works alongside screen
-          readers and other assistive tools rather than replacing them. All flight data here is simulated.
-        </p>
+      <footer className="footer">
+        <div className="footer__inner wrap">
+          <div className="footer__brand">
+            <p className="wordmark__name">Sightline</p>
+            <p className="mono mono--accent">The web, on your terms.</p>
+          </div>
+          <p className="footer__note">
+            SIGHTLINE is an accessibility-focused digital companion, built as a prototype. It works alongside screen
+            readers and other assistive tools rather than replacing them. Every flight, price and booking reference
+            in this demonstration is simulated: no airline is contacted and no payment is ever taken.
+          </p>
+        </div>
       </footer>
     </div>
   )
