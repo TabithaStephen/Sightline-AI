@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pause, Play, RotateCcw, SkipForward, X } from 'lucide-react'
 import { useVoice } from '../components/VoiceProvider'
-import { DEMO_SCRIPT, type DemoStep } from './script'
+import { DEMO_SCRIPT, type DemoContext, type DemoStep } from './script'
 import { drivers } from './drivers'
 
 type Phase = 'idle' | 'listening' | 'processing' | 'speaking'
@@ -12,9 +12,12 @@ interface Props {
 }
 
 /**
- * Runs the Guided Demo as a cancellable async sequence rather than a chain of
- * fragile timers: each step awaits the one before it, and pause, skip, restart
- * and exit all resolve the pending wait immediately.
+ * Runs the Guided Demo as a cancellable async sequence.
+ *
+ * The demo is silent by design: the presenter narrates it. Nothing here calls
+ * speech synthesis, opens the microphone or plays a sound, and no step waits on
+ * a speech callback — pacing comes from the animation itself, so the demo can
+ * never stall on an audio API.
  */
 export default function DemoController({ running, onExit }: Props) {
   const voice = useVoice()
@@ -22,17 +25,20 @@ export default function DemoController({ running, onExit }: Props) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [paused, setPaused] = useState(false)
   const [transcript, setTranscript] = useState('')
+  const [caption, setCaption] = useState('')
   const [runKey, setRunKey] = useState(0)
 
   // The voice api object is rebuilt on every provider render, so the runner
-  // reaches it through a ref. Depending on it directly would restart the demo
-  // loop on every render and cancel its own narration.
+  // reaches it through a ref. Depending on it directly would restart the loop.
   const voiceRef = useRef(voice)
   voiceRef.current = voice
 
   const tokenRef = useRef(0)
   const pausedRef = useRef(false)
-  const skipRef = useRef<(() => void) | null>(null)
+  /** Resolves the current wait early, for Skip step and Exit. */
+  const interruptRef = useRef<(() => void) | null>(null)
+  /** Set while a step is being skipped so its remaining work bails out. */
+  const skippedRef = useRef(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
   pausedRef.current = paused
@@ -40,50 +46,29 @@ export default function DemoController({ running, onExit }: Props) {
   const total = DEMO_SCRIPT.length
   const current: DemoStep | undefined = DEMO_SCRIPT[index]
 
-  /** Resolves when unpaused, or immediately if the run was cancelled. */
-  const waitWhilePaused = useCallback(async (token: number) => {
-    while (pausedRef.current && tokenRef.current === token) {
-      await new Promise((resolve) => setTimeout(resolve, 120))
-    }
-  }, [])
-
-  /** Speaks and resolves when finished, skipped, or after a safety timeout. */
-  const speakAsync = useCallback(
-    (text: string) =>
+  /** A sleep that resolves early on skip or exit, and never while paused. */
+  const sleep = useCallback(
+    (ms: number, token: number) =>
       new Promise<void>((resolve) => {
-        let done = false
-        const finish = () => {
-          if (done) return
-          done = true
-          skipRef.current = null
-          window.clearTimeout(guard)
+        if (tokenRef.current !== token) return resolve()
+        const timer = window.setTimeout(() => {
+          interruptRef.current = null
+          resolve()
+        }, ms)
+        interruptRef.current = () => {
+          window.clearTimeout(timer)
           resolve()
         }
-        // Skip and exit both resolve the pending narration straight away.
-        skipRef.current = finish
-        // If speech synthesis never reports back, the demo still moves on.
-        const guard = window.setTimeout(finish, Math.min(4000 + text.length * 70, 45000))
-        voiceRef.current.speak(text, finish)
       }),
     [],
   )
 
-  const sleep = useCallback(
-    (ms: number, token: number) =>
-      new Promise<void>((resolve) => {
-        const timer = window.setTimeout(() => {
-          skipRef.current = null
-          resolve()
-        }, ms)
-        skipRef.current = () => {
-          window.clearTimeout(timer)
-          resolve()
-        }
-        if (tokenRef.current !== token) {
-          window.clearTimeout(timer)
-          resolve()
-        }
-      }),
+  const waitWhilePaused = useCallback(
+    async (token: number) => {
+      while (pausedRef.current && tokenRef.current === token && !skippedRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 120))
+      }
+    },
     [],
   )
 
@@ -92,58 +77,65 @@ export default function DemoController({ running, onExit }: Props) {
     if (!running) return
     tokenRef.current += 1
     const token = tokenRef.current
-    let cancelled = false
+
+    // Nothing in the demo makes a sound.
+    voiceRef.current.setDemoSilent(true)
 
     async function run() {
       for (let i = 0; i < DEMO_SCRIPT.length; i++) {
-        if (tokenRef.current !== token || cancelled) return
+        if (tokenRef.current !== token) return
+        skippedRef.current = false
         setIndex(i)
-        const step = DEMO_SCRIPT[i]
-
-        await waitWhilePaused(token)
-        if (tokenRef.current !== token) return
-
-        setPhase('processing')
         setTranscript('')
-        try {
-          await step.before?.()
-        } catch {
-          // A step that cannot set up is skipped rather than stalling the demo.
-        }
-        if (tokenRef.current !== token) return
+        setPhase('idle')
 
-        // A scripted utterance: the orb listens, then the words appear.
-        if (step.transcript) {
-          setPhase('listening')
-          await sleep(1100, token)
-          if (tokenRef.current !== token) return
-          setTranscript(step.transcript)
-          setPhase('processing')
-          await sleep(650, token)
-          if (tokenRef.current !== token) return
+        const cancelled = () => tokenRef.current !== token || skippedRef.current
+
+        const ctx: DemoContext = {
+          caption: (text) => {
+            if (!cancelled()) setCaption(text)
+          },
+          phase: (next) => {
+            if (!cancelled()) setPhase(next)
+          },
+          transcript: (text) => {
+            if (!cancelled()) setTranscript(text)
+          },
+          cancelled,
+          hold: async (ms) => {
+            await waitWhilePaused(token)
+            if (cancelled()) return
+            await sleep(ms, token)
+          },
+          // Typing is driven one character at a time, checking pause between
+          // each: pausing stops mid-word and resuming carries on from there
+          // rather than restarting the field.
+          type: async (apply, text, speedMs = 45) => {
+            for (let position = 1; position <= text.length; position += 1) {
+              await waitWhilePaused(token)
+              if (cancelled()) {
+                // Leave the field complete rather than half-typed.
+                apply(text)
+                return
+              }
+              apply(text.slice(0, position))
+              await sleep(speedMs, token)
+            }
+          },
         }
 
         await waitWhilePaused(token)
         if (tokenRef.current !== token) return
 
-        setPhase('speaking')
-        let text = ''
         try {
-          text = step.say()
+          await DEMO_SCRIPT[i].run(ctx)
         } catch {
-          text = ''
+          // A step that cannot run is skipped rather than stalling the demo.
         }
-        if (text) await speakAsync(text)
+
         if (tokenRef.current !== token) return
-
-        try {
-          await step.after?.()
-        } catch {
-          // Same again: never let a failed transition freeze the demo.
-        }
-
         setPhase('idle')
-        await sleep(420, token)
+        await sleep(400, token)
       }
 
       if (tokenRef.current === token) {
@@ -154,31 +146,45 @@ export default function DemoController({ running, onExit }: Props) {
 
     void run()
     return () => {
-      cancelled = true
       tokenRef.current += 1
     }
-  }, [running, runKey, sleep, speakAsync, waitWhilePaused])
+  }, [running, runKey, sleep, waitWhilePaused])
 
-  // Keep the companion's orb in step with the demo.
+  // The orb mirrors the demo's phases, silently.
   useEffect(() => {
     voiceRef.current.setDemoPhase(running ? phase : null)
   }, [phase, running])
 
-  useEffect(() => () => voiceRef.current.setDemoPhase(null), [])
+  useEffect(
+    () => () => {
+      voiceRef.current.setDemoPhase(null)
+      voiceRef.current.setDemoSilent(false)
+    },
+    [],
+  )
 
   useEffect(() => {
     if (running) panelRef.current?.focus()
   }, [running])
 
+  const skipStep = useCallback(() => {
+    skippedRef.current = true
+    interruptRef.current?.()
+    interruptRef.current = null
+  }, [])
+
   const handleExit = useCallback(() => {
     tokenRef.current += 1
-    skipRef.current?.()
-    skipRef.current = null
-    voiceRef.current.stop()
+    skippedRef.current = true
+    interruptRef.current?.()
+    interruptRef.current = null
+    // Voice returns to normal the moment the demo ends.
     voiceRef.current.setDemoPhase(null)
+    voiceRef.current.setDemoSilent(false)
     setPaused(false)
     setPhase('idle')
     setTranscript('')
+    setCaption('')
     setIndex(0)
     // Demo data never stays behind in the user's own workflow.
     drivers.flight?.reset()
@@ -186,6 +192,22 @@ export default function DemoController({ running, onExit }: Props) {
     drivers.setScenario?.('flight')
     onExit()
   }, [onExit])
+
+  const restart = useCallback(() => {
+    tokenRef.current += 1
+    skippedRef.current = true
+    interruptRef.current?.()
+    interruptRef.current = null
+    setPaused(false)
+    setIndex(0)
+    setTranscript('')
+    setCaption('')
+    setPhase('idle')
+    drivers.setScenario?.('flight')
+    drivers.flight?.reset()
+    drivers.student?.reset()
+    setRunKey((value) => value + 1)
+  }, [])
 
   useEffect(() => {
     if (!running) return
@@ -201,7 +223,7 @@ export default function DemoController({ running, onExit }: Props) {
 
   if (!running || !current) return null
 
-  const progress = ((index + (phase === 'idle' ? 1 : 0.5)) / total) * 100
+  const progress = ((index + 1) / total) * 100
 
   return (
     <div className="demo-bar" role="region" aria-label="Guided demo controls" ref={panelRef} tabIndex={-1}>
@@ -209,6 +231,8 @@ export default function DemoController({ running, onExit }: Props) {
         <div className="demo-bar__head">
           <p className="mono mono--accent">
             Guided demo <span aria-hidden="true">&mdash;</span> Act {current.act} of 2
+            <span aria-hidden="true"> &middot; </span>
+            <span className="demo-bar__silent">Silent</span>
           </p>
           <p className="mono">
             Step {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
@@ -218,20 +242,13 @@ export default function DemoController({ running, onExit }: Props) {
         <div className="demo-bar__body">
           <div className="demo-bar__text">
             <p className="demo-bar__title">{current.title}</p>
-            <p className="fine">
-              {phase === 'listening'
-                ? 'Listening (simulated — no microphone is used)'
-                : phase === 'processing'
-                  ? 'Working out what to say from the screen'
-                  : phase === 'speaking'
-                    ? 'Narrating'
-                    : 'Ready for the next step'}
-            </p>
             {transcript && (
               <p className="demo-bar__transcript">
                 <span className="mono">Heard</span> &ldquo;{transcript}&rdquo;
               </p>
             )}
+            {caption && <p className="demo-bar__caption">{caption}</p>}
+            {paused && <p className="mono mono--accent">Paused</p>}
           </div>
 
           <div className="demo-bar__controls">
@@ -244,34 +261,11 @@ export default function DemoController({ running, onExit }: Props) {
               {paused ? <Play size={15} aria-hidden="true" /> : <Pause size={15} aria-hidden="true" />}
               {paused ? 'Resume' : 'Pause'}
             </button>
-            <button
-              type="button"
-              className="btn btn--secondary btn--compact"
-              onClick={() => {
-                voice.stop()
-                skipRef.current?.()
-              }}
-            >
+            <button type="button" className="btn btn--secondary btn--compact" onClick={skipStep}>
               <SkipForward size={15} aria-hidden="true" />
               Skip step
             </button>
-            <button
-              type="button"
-              className="btn btn--secondary btn--compact"
-              onClick={() => {
-                tokenRef.current += 1
-                voice.stop()
-                skipRef.current?.()
-                setPaused(false)
-                setIndex(0)
-                setTranscript('')
-                drivers.setScenario?.('flight')
-                drivers.flight?.reset()
-                drivers.student?.reset()
-                // Bumping the run key restarts the sequence from the top.
-                setRunKey((value) => value + 1)
-              }}
-            >
+            <button type="button" className="btn btn--secondary btn--compact" onClick={restart}>
               <RotateCcw size={15} aria-hidden="true" />
               Restart
             </button>

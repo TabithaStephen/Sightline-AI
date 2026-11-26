@@ -75,6 +75,9 @@ function Workflow() {
   const [scenario, setScenario] = useState<Scenario>('flight')
   const [demoRunning, setDemoRunning] = useState(false)
   const [studentStage, setStudentStage] = useState<string>('personal')
+  // A visible searching state, used by the Guided Demo so the search reads as
+  // an action rather than an instant jump. The normal flow is unchanged.
+  const [searching, setSearching] = useState(false)
   const [step, setStep] = useState<Step>('entry')
   const [requestText, setRequestText] = useState('')
   const [request, setRequest] = useState<TripRequest | null>(null)
@@ -205,15 +208,26 @@ function Workflow() {
       bookingRef,
     })
     drivers.flight = {
-      reset: handleRestart,
+      reset: () => {
+        setSearching(false)
+        handleRestart()
+      },
       applyRequest: (text) => handleRequest(text),
-      showResults: handleShowResults,
+      showResults: () => {
+        setSearching(false)
+        handleShowResults()
+      },
       selectRecommended: () => {
         const id = result?.recommendedId ?? result?.matches[0]?.flight.id
         if (id) handleSelect(id)
       },
+      beginSearch: () => {
+        setSearching(true)
+        setStep('results')
+      },
       continueToPassenger: () => setStep('passenger'),
       setPassenger: (next) => setPassenger(next),
+      setPassengerField: (key, value) => setPassenger((current) => ({ ...current, [key]: value })),
       validateNow: () =>
         Object.entries(validatePassenger(passenger)).filter(([, value]) => Boolean(value)) as Array<
           [keyof Passenger, string]
@@ -518,7 +532,31 @@ function Workflow() {
             />
           )}
 
-          {scenario === 'flight' && step === 'results' && request && result && (
+          {scenario === 'flight' && step === 'results' && searching && (
+            <section className="band" aria-labelledby="searching-heading" aria-busy="true">
+              <p className="eyebrow">
+                Step 02 / 05 <span aria-hidden="true">&mdash;</span> Searching
+              </p>
+              <h1 className="display--md" id="searching-heading">
+                Looking for <span className="serif">flights</span>
+              </h1>
+              <p className="lede">
+                Matching your request against the simulated flight data for this route.
+              </p>
+              <ul className="skeleton-list" aria-hidden="true">
+                {[0, 1, 2].map((row) => (
+                  <li className="skeleton" key={row}>
+                    <span className="skeleton__bar skeleton__bar--wide" />
+                    <span className="skeleton__bar" />
+                    <span className="skeleton__bar skeleton__bar--short" />
+                  </li>
+                ))}
+              </ul>
+              <p className="mono">Searching simulated flights&hellip;</p>
+            </section>
+          )}
+
+          {scenario === 'flight' && step === 'results' && !searching && request && result && (
             <FlightResults
               request={request}
               result={result}

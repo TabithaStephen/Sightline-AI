@@ -20,6 +20,8 @@ export interface StudentDriver {
   reset: () => void
   setStage: (stage: StudentStageId) => void
   setFields: (patch: Partial<StudentApplication>) => void
+  /** One field at a time, so the demo can type into it visibly. */
+  setField: (key: StudentFieldKey, value: string) => void
   setDocument: (id: string, provided: boolean) => void
   submitStage: () => void
   submitApplication: () => void
@@ -127,6 +129,7 @@ export default function StudentWorkflow({ onAnnounce, registerDriver }: Props) {
       reset: handleReset,
       setStage: (next) => goTo(next),
       setFields: (next) => patch(next),
+      setField: (key, value) => patch({ [key]: value } as Partial<StudentApplication>),
       setDocument: (id, provided) =>
         setDocuments((current) => current.map((item) => (item.id === id ? { ...item, provided } : item))),
       submitStage: handleContinue,

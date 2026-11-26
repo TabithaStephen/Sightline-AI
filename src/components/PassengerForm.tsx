@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, CircleAlert, Mic, Volume2 } from 'lucide-react'
 import { useVoice } from './VoiceProvider'
+import { drivers } from '../demo/drivers'
 import { cityName } from '../data/airports'
 import { clockToHuman, rupees } from '../lib/format'
 import { FIELD_HINT, errorHelp, errorSummarySpeech, fieldHelp } from '../lib/narrate'
@@ -57,6 +58,22 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
   focusedRef.current = focused
   passengerRef.current = passenger
   onChangeRef.current = onChange
+
+  // The Guided Demo runs this exact path, so the error the judge sees is the
+  // form's own validation, not a mock-up of one.
+  useEffect(() => {
+    drivers.passengerForm = {
+      validate: () => {
+        const found = validatePassenger(passengerRef.current)
+        setErrors(found)
+        setShowSummary(Object.keys(found).length > 0)
+        return Object.keys(found).length
+      },
+    }
+    return () => {
+      drivers.passengerForm = null
+    }
+  }, [])
 
   // Form guardian: when a field takes focus it becomes the subject of the
   // on-screen guidance, and Guided Mode speaks the longer explanation.

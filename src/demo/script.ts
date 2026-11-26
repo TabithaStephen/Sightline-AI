@@ -1,239 +1,384 @@
 /**
- * The Guided Demo script: twelve deterministic steps across both workflows.
+ * The Guided Demo script.
  *
- * Every line is either fixed copy or narration generated from the data the
- * screen is actually showing. Nothing here uses a microphone, a network call
- * or any external service, so it runs identically every time.
+ * Every step drives the real application UI — typing into the real inputs,
+ * pressing the real buttons, triggering the real validation — so the audience
+ * watches the product being used rather than a slideshow about it.
+ *
+ * The demo is completely silent: captions explain what is happening on screen
+ * while the presenter speaks. Nothing here touches speech synthesis, speech
+ * recognition, the microphone, or any network or external service.
  */
 
 import { drivers, waitFor } from './drivers'
 import { DEMO_APPLICATION } from '../student/data'
-import { studentExplainScreen, studentNextSteps } from '../student/narrate'
+
+export interface DemoContext {
+  /** Types text into a field one character at a time, pause-aware. */
+  type: (apply: (value: string) => void, text: string, speedMs?: number) => Promise<void>
+  /** A pause the judge can watch — interrupted cleanly by pause, skip and exit. */
+  hold: (ms: number) => Promise<void>
+  /** The line shown in the demo bar. Never spoken. */
+  caption: (text: string) => void
+  /** Mirrors the orb so the companion reads as busy while the demo acts. */
+  phase: (phase: 'idle' | 'listening' | 'processing' | 'speaking') => void
+  /** The simulated utterance shown as a transcript. */
+  transcript: (text: string) => void
+  cancelled: () => boolean
+}
 
 export interface DemoStep {
   id: string
   act: 1 | 2
   title: string
-  scenario: 'flight' | 'student'
-  /** A simulated user utterance shown as a transcript before the narration. */
-  transcript?: string
-  /** Runs before the narration — usually the state change being demonstrated. */
-  before?: () => void | Promise<void>
-  /** The narration, resolved at run time so it reflects real screen data. */
-  say: () => string
-  /** Runs after the narration has finished. */
-  after?: () => void | Promise<void>
+  run: (ctx: DemoContext) => Promise<void>
 }
 
-const PASSENGER_INVALID = { fullName: 'Asha Menon', email: 'asha.menon.example.com', phone: '9876543210' }
-const PASSENGER_FIXED = { fullName: 'Asha Menon', email: 'asha.menon@example.com', phone: '9876543210' }
+const REQUEST_TEXT = 'A direct flight from Bengaluru to Mumbai tomorrow morning'
+const PASSENGER = { fullName: 'Asha Menon', email: 'asha.menon@example.com', phone: '9876543210' }
+const BAD_EMAIL = 'asha.menon.example.com'
+const BAD_STUDENT_EMAIL = 'rhea.nair.example.com'
 
-const STUDENT_INVALID = { ...DEMO_APPLICATION, email: 'rhea.nair.example.com' }
-
-async function flight() {
-  return waitFor(() => drivers.flight)
-}
-
-async function student() {
-  return waitFor(() => drivers.student)
-}
+const flight = () => waitFor(() => drivers.flight)
+const entry = () => waitFor(() => drivers.taskEntry)
+const form = () => waitFor(() => drivers.passengerForm)
+const student = () => waitFor(() => drivers.student)
 
 export const DEMO_SCRIPT: DemoStep[] = [
+  /* ------------------------------------------------- Act 1 — flight booking */
   {
-    id: 'intro',
+    id: 'open',
     act: 1,
-    title: 'What SIGHTLINE is',
-    scenario: 'flight',
-    before: async () => {
+    title: 'Opening the flight task',
+    run: async (ctx) => {
       drivers.setScenario?.('flight')
       ;(await flight())?.reset()
+      ctx.caption(
+        'SIGHTLINE takes one task at a time and walks a person through it. This is the flight booking task, starting from an empty request.',
+      )
+      await ctx.hold(2600)
     },
-    say: () =>
-      'This is SIGHTLINE. Complex websites assume you can see the whole screen at once, scan it, and work out what matters. If you cannot, that assumption is the barrier. SIGHTLINE takes one task at a time, explains the screen in plain language, helps you weigh the options, and keeps every consequential decision in your hands. This demonstration runs two completely different tasks, start to finish, with nothing but local data.',
   },
   {
-    id: 'screen',
+    id: 'speak-request',
     act: 1,
-    title: 'Understanding the screen',
-    scenario: 'flight',
-    before: async () => {
-      drivers.setScenario?.('flight')
-      ;(await flight())?.reset()
+    title: 'The request, in the user’s own words',
+    run: async (ctx) => {
+      ctx.phase('listening')
+      ctx.caption('The user says what they need. No form, no dropdowns — just a sentence.')
+      await ctx.hold(1400)
+      ctx.transcript('I want to travel from Bengaluru to Mumbai tomorrow morning.')
+      ctx.phase('processing')
+      await ctx.hold(900)
     },
-    say: () => drivers.flight?.explain() ?? 'The flight request screen is open.',
   },
   {
-    id: 'request',
+    id: 'type-request',
     act: 1,
-    title: 'Speaking a request',
-    scenario: 'flight',
-    transcript: 'I want to travel from Bengaluru to Mumbai tomorrow morning.',
-    before: async () => {
-      ;(await flight())?.applyRequest('I want to travel from Bengaluru to Mumbai tomorrow morning, direct.')
+    title: 'Filling the request box',
+    run: async (ctx) => {
+      await entry()
+      ctx.caption('SIGHTLINE writes that into the request box, where it can be read back and corrected.')
+      ctx.phase('processing')
+      await ctx.type((value) => drivers.taskEntry?.setText(value), REQUEST_TEXT, 34)
+      drivers.taskEntry?.setText(REQUEST_TEXT)
+      await ctx.hold(900)
     },
-    say: () =>
-      `${drivers.flight?.explain() ?? ''} In the demonstration that request is scripted rather than spoken into a microphone, so it runs the same way every time.`,
+  },
+  {
+    id: 'interpret',
+    act: 1,
+    title: 'Reading the request back',
+    run: async (ctx) => {
+      ;(await entry())?.submit()
+      await ctx.hold(700)
+      ctx.caption(
+        'Before searching anything, SIGHTLINE shows what it understood: the cities, the budget, whether stops are allowed. Anything it filled in for itself is marked, and every detail is editable.',
+      )
+      ctx.phase('idle')
+      await ctx.hold(4200)
+    },
+  },
+  {
+    id: 'search',
+    act: 1,
+    title: 'Searching',
+    run: async (ctx) => {
+      await flight()
+      ctx.caption('The user confirms, and the search runs against the local simulated flight data.')
+      ctx.phase('processing')
+      drivers.flight?.beginSearch()
+      await ctx.hold(1700)
+      drivers.flight?.showResults()
+      await ctx.hold(1200)
+    },
   },
   {
     id: 'results',
     act: 1,
-    title: 'Helping you decide',
-    scenario: 'flight',
-    before: async () => {
-      ;(await flight())?.showResults()
+    title: 'Helping the user decide',
+    run: async (ctx) => {
+      ctx.phase('idle')
+      ctx.caption(
+        'The options are on screen. The hard part is not reading them, it is weighing them up — so SIGHTLINE does that out loud.',
+      )
+      await ctx.hold(2800)
+      ctx.caption(drivers.flight?.tradeOff() ?? '')
+      await ctx.hold(5200)
     },
-    say: () =>
-      `${drivers.flight?.explain() ?? ''} ${drivers.flight?.tradeOff() ?? ''} That comparison is worked out from the fares and journey times on screen, not from anything invented.`,
   },
   {
     id: 'select',
     act: 1,
     title: 'Choosing a flight',
-    scenario: 'flight',
-    transcript: 'Take the recommended one.',
-    before: async () => {
-      const api = await flight()
-      api?.selectRecommended()
-    },
-    say: () =>
-      `${drivers.flight?.describeSelected() ?? ''} Notice that SIGHTLINE did not choose for you: selecting a flight is a decision, so it stays an action you take. Nothing is booked yet.`,
-    after: async () => {
-      ;(await flight())?.continueToPassenger()
+    run: async (ctx) => {
+      await flight()
+      ctx.caption('The user picks the recommended flight. SIGHTLINE never chooses for them.')
+      drivers.flight?.selectRecommended()
+      await ctx.hold(2400)
+      ctx.caption(drivers.flight?.describeSelected() ?? '')
+      await ctx.hold(1800)
+      drivers.flight?.continueToPassenger()
+      await ctx.hold(900)
     },
   },
   {
-    id: 'guardian',
+    id: 'passenger-name',
     act: 1,
-    title: 'Catching a mistake',
-    scenario: 'flight',
-    before: async () => {
-      const api = await flight()
-      api?.setPassenger(PASSENGER_INVALID)
-      await new Promise((resolve) => setTimeout(resolve, 400))
-      api?.validateNow()
+    title: 'Entering passenger details',
+    run: async (ctx) => {
+      await flight()
+      ctx.caption('Passenger details. SIGHTLINE explains each field as it is reached, then fills it in.')
+      ctx.phase('processing')
+      await ctx.type((value) => drivers.flight?.setPassengerField('fullName', value), PASSENGER.fullName, 60)
+      await ctx.hold(600)
     },
-    say: () => {
-      const errors = drivers.flight?.validateNow() ?? []
-      const problem = errors.length
-        ? "That email address doesn't appear to be valid. Please check that it contains a complete address, with an at sign and a dot."
-        : 'The passenger details are filled in.'
-      return `The passenger details are filled in from demonstration data, and one of them is deliberately wrong. ${problem} SIGHTLINE names the one field that is wrong and says what to do about it, rather than reading the whole form's rules back at you.`
+  },
+  {
+    id: 'passenger-email',
+    act: 1,
+    title: 'A mistake, on purpose',
+    run: async (ctx) => {
+      await flight()
+      ctx.caption('Watch the email address. This one is deliberately wrong — the at sign is missing.')
+      await ctx.type((value) => drivers.flight?.setPassengerField('email', value), BAD_EMAIL, 44)
+      await ctx.hold(700)
+      await ctx.type((value) => drivers.flight?.setPassengerField('phone', value), PASSENGER.phone, 55)
+      await ctx.hold(900)
     },
-    after: async () => {
-      const api = await flight()
-      api?.setPassenger(PASSENGER_FIXED)
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      api?.goReview()
+  },
+  {
+    id: 'passenger-error',
+    act: 1,
+    title: 'Catching the mistake',
+    run: async (ctx) => {
+      await form()
+      const count = drivers.passengerForm?.validate() ?? 0
+      ctx.caption(
+        count > 0
+          ? 'The form’s own validation catches it. SIGHTLINE names the one field that is wrong and says what to do about it — it does not read the whole form’s rules back at you.'
+          : 'The form validated cleanly.',
+      )
+      await ctx.hold(4200)
+    },
+  },
+  {
+    id: 'passenger-fix',
+    act: 1,
+    title: 'Correcting it',
+    run: async (ctx) => {
+      await flight()
+      ctx.caption('The correction goes in, and the error clears as soon as the value is valid.')
+      drivers.flight?.setPassengerField('email', '')
+      await ctx.hold(500)
+      await ctx.type((value) => drivers.flight?.setPassengerField('email', value), PASSENGER.email, 40)
+      await ctx.hold(600)
+      const count = (await form())?.validate() ?? 0
+      ctx.caption(count === 0 ? 'Validation passes. Nothing has been booked yet.' : 'Still checking the details.')
+      await ctx.hold(2200)
+    },
+  },
+  {
+    id: 'review',
+    act: 1,
+    title: 'Review before anything happens',
+    run: async (ctx) => {
+      await flight()
+      drivers.flight?.goReview()
+      ctx.phase('idle')
+      await ctx.hold(800)
+      ctx.caption(
+        'The review shows the chosen flight and the passenger details together, with a way back into either. Nothing is booked until the user decides.',
+      )
+      await ctx.hold(4600)
     },
   },
   {
     id: 'confirm',
     act: 1,
-    title: 'Review and completion',
-    scenario: 'flight',
-    say: () => `${drivers.flight?.explain() ?? ''}`,
-    after: async () => {
-      ;(await flight())?.confirm()
+    title: 'Completing the task',
+    run: async (ctx) => {
+      await flight()
+      drivers.flight?.confirm()
+      await ctx.hold(900)
+      ctx.caption(
+        'A simulated confirmation, stated as such on screen. No airline was contacted, no seat held, no payment taken.',
+      )
+      await ctx.hold(4200)
     },
   },
+
+  /* --------------------------------------- Act 2 — student assistance */
   {
-    id: 'act2-intro',
+    id: 'act2-switch',
     act: 2,
     title: 'A completely different task',
-    scenario: 'student',
-    before: async () => {
+    run: async (ctx) => {
       drivers.setScenario?.('student')
-      const api = await student()
-      api?.reset()
-    },
-    say: () =>
-      'That was a flight booked, as a simulation, from a sentence in plain English. The booking is not the point. The same companion works on any guided task, so here is a completely different one: a student applying for travel assistance. Same voice, same explanations, same field guidance — a different form entirely.',
-  },
-  {
-    id: 'act2-understand',
-    act: 2,
-    title: 'Understanding the application',
-    scenario: 'student',
-    say: () => {
-      const state = drivers.student?.getState()
-      return state
-        ? studentExplainScreen({ ...state, reference: null })
-        : 'The student assistance application is open.'
+      await student()
+      drivers.student?.reset()
+      ctx.caption(
+        'The booking is not the point. The same companion runs any guided task — here is a student applying for travel assistance.',
+      )
+      await ctx.hold(3400)
     },
   },
   {
-    id: 'act2-fill',
+    id: 'act2-personal',
     act: 2,
-    title: 'Completing the sections',
-    scenario: 'student',
-    transcript: 'My name is Rhea Nair, I study computer science at St. Joseph’s.',
-    before: async () => {
-      const api = await student()
-      api?.setFields(STUDENT_INVALID)
-      await new Promise((resolve) => setTimeout(resolve, 400))
+    title: 'Personal details',
+    run: async (ctx) => {
+      await student()
+      ctx.phase('processing')
+      ctx.caption('The same pattern: one section at a time, each field explained as it is filled.')
+      await ctx.type((value) => drivers.student?.setField('fullName', value), DEMO_APPLICATION.fullName, 62)
+      await ctx.type((value) => drivers.student?.setField('dateOfBirth', value), DEMO_APPLICATION.dateOfBirth, 70)
+      ctx.caption('And again, one entry is deliberately wrong — the email address has no at sign.')
+      await ctx.type((value) => drivers.student?.setField('email', value), BAD_STUDENT_EMAIL, 40)
+      await ctx.type((value) => drivers.student?.setField('phone', value), DEMO_APPLICATION.phone, 55)
+      await ctx.hold(800)
     },
-    say: () =>
-      'The application is filled in from demonstration data: personal details, college and student number, course and year, and the household income that decides which assistance band applies. SIGHTLINE explains why each section exists rather than just listing the fields.',
   },
   {
     id: 'act2-error',
     act: 2,
-    title: 'Catching a mistake again',
-    scenario: 'student',
-    say: () =>
-      "One entry here is wrong on purpose. That email address doesn't appear to be valid. Please check that it contains a complete address, with an at sign and a dot. Again, just the one problem, in plain words — not the whole rule book.",
-    after: async () => {
-      const api = await student()
-      api?.setFields({ email: DEMO_APPLICATION.email })
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      api?.setStage('documents')
+    title: 'The same guardian, a different form',
+    run: async (ctx) => {
+      await student()
+      drivers.student?.submitStage()
+      await ctx.hold(600)
+      ctx.caption(
+        'The section will not advance. The specific problem is named in plain words, in exactly the way it was on the flight form.',
+      )
+      await ctx.hold(4000)
+      ctx.caption('The correction goes in, and the section advances.')
+      drivers.student?.setField('email', '')
+      await ctx.hold(400)
+      await ctx.type((value) => drivers.student?.setField('email', value), DEMO_APPLICATION.email, 38)
+      await ctx.hold(700)
+      drivers.student?.submitStage()
+      await ctx.hold(1400)
+    },
+  },
+  {
+    id: 'act2-college',
+    act: 2,
+    title: 'College and student number',
+    run: async (ctx) => {
+      await student()
+      ctx.caption('College and student number: assistance is issued through the college, so it needs both.')
+      drivers.student?.setField('collegeName', DEMO_APPLICATION.collegeName)
+      await ctx.hold(900)
+      await ctx.type((value) => drivers.student?.setField('studentId', value), DEMO_APPLICATION.studentId, 60)
+      await ctx.hold(900)
+      drivers.student?.submitStage()
+      await ctx.hold(1200)
+    },
+  },
+  {
+    id: 'act2-course',
+    act: 2,
+    title: 'Course and year',
+    run: async (ctx) => {
+      await student()
+      ctx.caption('Course and year decide which assistance band the application is assessed against.')
+      drivers.student?.setField('course', DEMO_APPLICATION.course)
+      await ctx.hold(1000)
+      drivers.student?.setField('academicYear', DEMO_APPLICATION.academicYear)
+      await ctx.hold(1200)
+      drivers.student?.submitStage()
+      await ctx.hold(1200)
+    },
+  },
+  {
+    id: 'act2-eligibility',
+    act: 2,
+    title: 'Eligibility',
+    run: async (ctx) => {
+      await student()
+      ctx.caption('The income figure decides the outcome, so SIGHTLINE explains what it is used for before asking.')
+      await ctx.type((value) => drivers.student?.setField('annualIncome', value), DEMO_APPLICATION.annualIncome, 80)
+      await ctx.hold(500)
+      drivers.student?.setField('category', DEMO_APPLICATION.category)
+      await ctx.hold(800)
+      await ctx.type((value) => drivers.student?.setField('travelRoute', value), DEMO_APPLICATION.travelRoute, 36)
+      await ctx.hold(900)
+      drivers.student?.submitStage()
+      await ctx.hold(1300)
     },
   },
   {
     id: 'act2-documents',
     act: 2,
     title: 'The document checklist',
-    scenario: 'student',
-    before: async () => {
-      const api = await student()
-      api?.setStage('documents')
-      await new Promise((resolve) => setTimeout(resolve, 250))
-      api?.setDocument('id-card', true)
-      api?.setDocument('bonafide', true)
-      api?.setDocument('photo', true)
-    },
-    say: () => {
+    run: async (ctx) => {
+      await student()
+      ctx.phase('idle')
+      ctx.caption('Supporting documents. Each is ticked off as it is confirmed.')
+      await ctx.hold(1400)
+      drivers.student?.setDocument('id-card', true)
+      await ctx.hold(1100)
+      drivers.student?.setDocument('bonafide', true)
+      await ctx.hold(1100)
+      drivers.student?.setDocument('photo', true)
+      await ctx.hold(1300)
       const state = drivers.student?.getState()
-      if (!state) return 'The document checklist is open.'
-      const missing = state.documents.filter((item) => !item.provided)
-      const ready = state.documents.filter((item) => item.provided)
-      return `${ready.length} of the ${state.documents.length} supporting documents are marked ready: ${ready.map((item) => item.label.toLowerCase()).join(', ')}. ${missing.length ? `Still missing: ${missing.map((item) => item.label.toLowerCase()).join(', ')}. SIGHTLINE says which one is outstanding and what it is for, so you know exactly what to go and find.` : 'Nothing is outstanding.'}`
+      const missing = state?.documents.filter((item) => !item.provided) ?? []
+      ctx.caption(
+        missing.length
+          ? `One is still outstanding: the ${missing[0].label.toLowerCase()}. SIGHTLINE says which one is missing and what it is for, so the user knows exactly what to go and find.`
+          : 'Every document is marked ready.',
+      )
+      await ctx.hold(4200)
+      drivers.student?.setStage('review')
+      await ctx.hold(1000)
+    },
+  },
+  {
+    id: 'act2-review',
+    act: 2,
+    title: 'Review and simulated decision',
+    run: async (ctx) => {
+      await student()
+      drivers.student?.setStage('review')
+      ctx.caption(
+        'The whole application in one place, with the simulated assistance band worked out from the income that was entered.',
+      )
+      await ctx.hold(5000)
     },
   },
   {
     id: 'act2-complete',
     act: 2,
-    title: 'Review and completion',
-    scenario: 'student',
-    before: async () => {
-      const api = await student()
-      api?.setStage('review')
-      await new Promise((resolve) => setTimeout(resolve, 350))
-    },
-    say: () => {
-      const state = drivers.student?.getState()
-      const review = state ? studentExplainScreen({ ...state, reference: null }) : ''
-      return `${review} To be completely clear about both halves of this demonstration: no flight was booked, no ticket exists, and no application has been filed with any college, authority or government service. Everything stayed in this browser.`
-    },
-    after: async () => {
-      const api = await student()
-      api?.submitApplication()
+    title: 'Completing the second task',
+    run: async (ctx) => {
+      await student()
+      drivers.student?.submitApplication()
+      await ctx.hold(900)
+      ctx.caption(
+        'Two completely different tasks, start to finish, with the same companion. To be clear about both: no flight was booked and no application was filed with any college or authority. Everything stayed in this browser.',
+      )
+      await ctx.hold(5200)
     },
   },
 ]
-
-export function stepsForAct(act: 1 | 2): DemoStep[] {
-  return DEMO_SCRIPT.filter((step) => step.act === act)
-}
-
-export { studentNextSteps }

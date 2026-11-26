@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Mic, MicOff } from 'lucide-react'
+import { drivers } from '../demo/drivers'
 
 const EXAMPLES = [
   'Find me a direct flight from Bengaluru to Mumbai under ₹8,000.',
@@ -59,6 +60,24 @@ export default function TaskEntry({ initialText, onSubmit }: Props) {
   const [voiceSupported] = useState(() => getRecognitionCtor() !== null)
 
   useEffect(() => () => recognitionRef.current?.stop(), [])
+
+  // The Guided Demo types into this box and presses the button, so the judge
+  // sees the real control being used rather than a scripted screenshot.
+  useEffect(() => {
+    drivers.taskEntry = {
+      setText: (value) => {
+        setText(value)
+        setError(null)
+      },
+      submit: () => {
+        const value = inputRef.current?.value ?? ''
+        if (value.trim().length >= 3) onSubmit(value)
+      },
+    }
+    return () => {
+      drivers.taskEntry = null
+    }
+  }, [onSubmit])
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()

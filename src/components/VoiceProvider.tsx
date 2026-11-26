@@ -76,6 +76,13 @@ interface VoiceApi {
   setNarrationOverride: (override: NarrationOverride | null) => void
   /** Lets the Guided Demo drive the orb's state directly. */
   setDemoPhase: (phase: VoiceStatus | null) => void
+  /**
+   * Silences the companion for the Guided Demo. While this is on, nothing
+   * reaches speech synthesis, no chime plays and the microphone is never
+   * opened — captions still update so the screen keeps explaining itself.
+   * It is scoped to the demo and restored the moment the demo exits.
+   */
+  setDemoSilent: (silent: boolean) => void
   /** Tells the companion a new stage has been reached, in any workflow. */
   notifyStage: (key: string) => void
   /**
@@ -114,6 +121,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [dictatingInto, setDictatingInto] = useState<string | null>(null)
   const [demoPhase, setDemoPhase] = useState<VoiceStatus | null>(null)
+  const silentRef = useRef(false)
 
   const canSpeak = useMemo(() => synthesisSupported(), [])
   const canListen = useMemo(() => recognitionSupported(), [])
@@ -157,6 +165,13 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         if (speechSeq.current !== seq) return
         setStatus((c) => (c === 'speaking' || c === 'processing' ? 'idle' : c))
         onDone?.()
+      }
+
+      if (silentRef.current) {
+        // Guided Demo: the caption is the whole response. Nothing is spoken.
+        setStatus('idle')
+        window.setTimeout(finish, 0)
+        return
       }
 
       if (!canSpeak) {
@@ -351,6 +366,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
 
   const startRecognition = useCallback(
     (mode: 'command' | 'dictation') => {
+      if (silentRef.current) return
       if (!canListen) {
         setError(
           'This browser does not support speech input. Everything in SIGHTLINE works with the keyboard and the buttons.',
@@ -451,6 +467,21 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     sinkRef.current = sink
   }, [])
 
+  const setDemoSilent = useCallback((silent: boolean) => {
+    silentRef.current = silent
+    if (silent) {
+      // Anything already in flight stops immediately when the demo starts.
+      speechSeq.current += 1
+      cancelSpeech()
+      try {
+        recognitionRef.current?.abort()
+      } catch {
+        // Nothing was listening.
+      }
+      setStatus('idle')
+    }
+  }, [])
+
   const setNarrationOverride = useCallback((override: NarrationOverride | null) => {
     overrideRef.current = override
     // Force the next stage notification to be treated as a change, so moving
@@ -465,6 +496,11 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
    */
   const speakThenListen = useCallback(
     (text: string) => {
+      if (silentRef.current) {
+        // Guided Demo: caption only, and the microphone stays closed.
+        speak(text)
+        return
+      }
       if (!canListen) {
         speak(
           `${text} Speech input is not available in this browser, so use the buttons or the keyboard — or the microphone button if you enable it.`,
@@ -592,6 +628,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     setNarrationOverride,
     notifyStage,
     setDemoPhase,
+    setDemoSilent,
   }
 
   return <VoiceCtx.Provider value={api}>{children}</VoiceCtx.Provider>

@@ -139,6 +139,19 @@
   color: var(--ivory);
 }
 
+/* The caption carries the explanation the demo no longer speaks. */
+.demo-bar__caption {
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--ivory-dim);
+  max-width: 76ch;
+}
+
+.demo-bar__silent {
+  color: var(--grey);
+  letter-spacing: 0.14em;
+}
+
 .demo-bar__transcript {
   font-size: 0.9375rem;
   color: var(--champagne-bright);
@@ -165,6 +178,68 @@
   height: 100%;
   background: var(--champagne);
   transition: width 400ms var(--ease-out);
+}
+
+/* ===================================================== Searching state */
+
+.skeleton-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border-block: 1px solid var(--line);
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.5rem clamp(0.75rem, 2vw, 1.5rem);
+  background: var(--obsidian);
+}
+
+.skeleton__bar {
+  height: 10px;
+  border-radius: 2px;
+  width: 42%;
+  background: linear-gradient(90deg, var(--charcoal) 0%, var(--elevated) 50%, var(--charcoal) 100%);
+  background-size: 220% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton__bar--wide {
+  width: 72%;
+  height: 14px;
+}
+
+.skeleton__bar--short {
+  width: 26%;
+}
+
+.skeleton:nth-child(2) .skeleton__bar {
+  animation-delay: 160ms;
+}
+
+.skeleton:nth-child(3) .skeleton__bar {
+  animation-delay: 320ms;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton__bar {
+    animation: none;
+    background: var(--elevated);
+  }
 }
 
 /* ============================================ Student application extras */
