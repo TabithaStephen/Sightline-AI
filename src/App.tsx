@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Headphones, RotateCcw, Type } from 'lucide-react'
+import { Headphones, PlayCircle, RotateCcw, Type } from 'lucide-react'
 import AssistPanel from './components/AssistPanel'
 import VoiceCompanion from './components/VoiceCompanion'
 import { useVoice, usePublishVoiceContext, VoiceProvider, type VoiceActions } from './components/VoiceProvider'
@@ -13,9 +13,17 @@ import { buildAssist } from './lib/assist'
 import { parseRequest } from './lib/parse'
 import { searchFlights } from './lib/search'
 import TaskEntry from './components/TaskEntry'
+import StudentWorkflow, { type StudentDriver } from './student/StudentWorkflow'
+import DemoController from './demo/DemoController'
+import { drivers } from './demo/drivers'
+import { answerChoiceQuestion, describeFlight, describeNext, explainScreen } from './lib/narrate'
+import { validatePassenger } from './components/PassengerForm'
+import { STAGE_LABEL, STAGE_ORDER } from './student/data'
+import { studentExplainScreen, studentNextSteps } from './student/narrate'
 import type { Passenger, Step, TripRequest } from './types'
 import './App.css'
 import './voice.css'
+import './demo.css'
 
 type TextSize = 'standard' | 'large' | 'xlarge'
 
@@ -53,6 +61,8 @@ function readStoredTextSize(): TextSize {
   return 'standard'
 }
 
+export type Scenario = 'flight' | 'student'
+
 export default function App() {
   return (
     <VoiceProvider>
@@ -62,6 +72,9 @@ export default function App() {
 }
 
 function Workflow() {
+  const [scenario, setScenario] = useState<Scenario>('flight')
+  const [demoRunning, setDemoRunning] = useState(false)
+  const [studentStage, setStudentStage] = useState<string>('personal')
   const [step, setStep] = useState<Step>('entry')
   const [requestText, setRequestText] = useState('')
   const [request, setRequest] = useState<TripRequest | null>(null)
@@ -172,6 +185,52 @@ function Workflow() {
     }
   })()
 
+  // The Guided Demo drives the real workflow through these actions, with
+  // predefined data — no microphone, no network, no external service.
+  useEffect(() => {
+    drivers.setScenario = (next) => setScenario(next)
+    return () => {
+      drivers.setScenario = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const narration = () => ({
+      step,
+      request,
+      result,
+      selected,
+      compared: result?.matches.filter((m) => compareIds.includes(m.flight.id)) ?? [],
+      passenger,
+      bookingRef,
+    })
+    drivers.flight = {
+      reset: handleRestart,
+      applyRequest: (text) => handleRequest(text),
+      showResults: handleShowResults,
+      selectRecommended: () => {
+        const id = result?.recommendedId ?? result?.matches[0]?.flight.id
+        if (id) handleSelect(id)
+      },
+      continueToPassenger: () => setStep('passenger'),
+      setPassenger: (next) => setPassenger(next),
+      validateNow: () =>
+        Object.entries(validatePassenger(passenger)).filter(([, value]) => Boolean(value)) as Array<
+          [keyof Passenger, string]
+        >,
+      goReview: () => setStep('review'),
+      confirm: handleConfirm,
+      explain: () => explainScreen(narration()),
+      nextSteps: () => describeNext(narration()),
+      tradeOff: () => answerChoiceQuestion('tradeoff', result, request),
+      describeSelected: () =>
+        selected ? `You have chosen ${describeFlight(selected)}.` : 'No flight is selected.',
+    }
+    return () => {
+      drivers.flight = null
+    }
+  })
+
   usePublishVoiceContext({
     step,
     request,
@@ -253,6 +312,22 @@ function Workflow() {
 
   const isEntry = step === 'entry'
 
+  // The guided help rail follows whichever task is on screen.
+  const studentState = scenario === 'student' ? (drivers.student?.getState() ?? null) : null
+  const studentAssist = studentState
+    ? {
+        heading: `${STAGE_LABEL[studentState.stage]} — what this section is for`,
+        nextAction: studentNextSteps({ ...studentState, reference: null }),
+        points: studentExplainScreen({ ...studentState, reference: null })
+          .split('. ')
+          .map((sentence) => sentence.trim())
+          .filter(Boolean)
+          .slice(0, 5)
+          .map((sentence) => (sentence.endsWith('.') ? sentence : `${sentence}.`)),
+        questions: [],
+      }
+    : null
+
   return (
     <div className="app">
       <a className="skip-link" href="#main">
@@ -300,6 +375,26 @@ function Workflow() {
               </div>
             </div>
 
+            <div className="scenario-switch" role="group" aria-label="Choose a task">
+              {([
+                { id: 'flight' as Scenario, label: 'Flight booking' },
+                { id: 'student' as Scenario, label: 'Student assistance' },
+              ]).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="scenario-switch__btn"
+                  aria-pressed={scenario === option.id}
+                  onClick={() => {
+                    setScenario(option.id)
+                    setAnnouncement(`Switched to the ${option.label.toLowerCase()} task.`)
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
             <button
               type="button"
               className="guided-toggle"
@@ -333,13 +428,22 @@ function Workflow() {
         <p className="sim-strip__inner wrap">
           <span className="sim-strip__dot" aria-hidden="true" />
           <span className="mono">
-            Simulated data <span aria-hidden="true">&mdash;</span> no airline is contacted, no seat is held and no
-            payment is ever taken
+            {scenario === 'flight' ? (
+              <>
+                Simulated data <span aria-hidden="true">&mdash;</span> no airline is contacted, no seat is held and
+                no payment is ever taken
+              </>
+            ) : (
+              <>
+                Simulated data <span aria-hidden="true">&mdash;</span> no application is filed with any college or
+                authority and no document is uploaded
+              </>
+            )}
           </span>
         </p>
       </div>
 
-      {!isEntry && (
+      {scenario === 'flight' && !isEntry && (
         <div className="rail">
           <div className="wrap">
             <ProgressSteps step={step} />
@@ -347,23 +451,65 @@ function Workflow() {
         </div>
       )}
 
-      <div className={isEntry ? 'shell shell--full' : 'shell'}>
+      {scenario === 'student' && (
+        <div className="rail">
+          <div className="wrap">
+            <nav aria-label="Application progress">
+              <ol className="rail__list rail__list--seven">
+                {STAGE_ORDER.map((id, order) => {
+                  const currentIndex = STAGE_ORDER.indexOf(studentStage as (typeof STAGE_ORDER)[number])
+                  const state = order < currentIndex ? 'done' : order === currentIndex ? 'current' : 'todo'
+                  return (
+                    <li
+                      key={id}
+                      className={`rail__item rail__item--${state}`}
+                      aria-current={state === 'current' ? 'step' : undefined}
+                    >
+                      <span className="rail__num num" aria-hidden="true">
+                        {String(order + 1).padStart(2, '0')}
+                      </span>
+                      <span className="rail__label">
+                        {STAGE_LABEL[id]}
+                        {state === 'done' && <span className="visually-hidden"> (completed)</span>}
+                        {state === 'current' && <span className="visually-hidden"> (current step)</span>}
+                        {state === 'todo' && <span className="visually-hidden"> (not started)</span>}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ol>
+            </nav>
+          </div>
+        </div>
+      )}
+
+      <div className={scenario === 'flight' && isEntry ? 'shell shell--full' : 'shell'}>
         <main
-          key={step}
-          className={isEntry ? 'column column--full' : 'column'}
+          key={scenario === 'student' ? 'student' : step}
+          className={scenario === 'flight' && isEntry ? 'column column--full' : 'column'}
           id="main"
           ref={mainRef}
           tabIndex={-1}
           aria-label="Guided flight booking"
         >
-          {step === 'entry' && (
+          {scenario === 'student' && (
+            <StudentWorkflow
+              onAnnounce={setAnnouncement}
+              registerDriver={(driver: StudentDriver | null) => {
+                drivers.student = driver
+                if (driver) setStudentStage(driver.getState().stage)
+              }}
+            />
+          )}
+
+          {scenario === 'flight' && step === 'entry' && (
             <>
               <TaskEntry initialText={requestText} onSubmit={handleRequest} />
               <AssistPanel content={assist} inline />
             </>
           )}
 
-          {step === 'interpret' && request && (
+          {scenario === 'flight' && step === 'interpret' && request && (
             <Interpretation
               request={request}
               onChange={setRequest}
@@ -372,7 +518,7 @@ function Workflow() {
             />
           )}
 
-          {step === 'results' && request && result && (
+          {scenario === 'flight' && step === 'results' && request && result && (
             <FlightResults
               request={request}
               result={result}
@@ -388,7 +534,7 @@ function Workflow() {
             />
           )}
 
-          {step === 'passenger' && selected && (
+          {scenario === 'flight' && step === 'passenger' && selected && (
             <PassengerForm
               passenger={passenger}
               flight={selected}
@@ -401,7 +547,7 @@ function Workflow() {
             />
           )}
 
-          {step === 'review' && selected && (
+          {scenario === 'flight' && step === 'review' && selected && (
             <ReviewBooking
               flight={selected}
               passenger={passenger}
@@ -411,7 +557,7 @@ function Workflow() {
             />
           )}
 
-          {step === 'confirmation' && selected && bookingRef && (
+          {scenario === 'flight' && step === 'confirmation' && selected && bookingRef && (
             <Confirmation
               flight={selected}
               passenger={passenger}
@@ -420,7 +566,7 @@ function Workflow() {
             />
           )}
 
-          {(step === 'passenger' || step === 'review' || step === 'confirmation') && !selected && (
+          {scenario === 'flight' && (step === 'passenger' || step === 'review' || step === 'confirmation') && !selected && (
             <section className="band" aria-labelledby="cleared-heading">
               <p className="eyebrow">Selection cleared</p>
               <h1 id="cleared-heading" className="display--md">
@@ -441,8 +587,28 @@ function Workflow() {
           )}
         </main>
 
-        {!isEntry && <AssistPanel content={assist} />}
+        {!(scenario === 'flight' && isEntry) && (
+          <AssistPanel content={scenario === 'student' && studentAssist ? studentAssist : assist} />
+        )}
       </div>
+
+      {!demoRunning && (
+        <button
+          type="button"
+          className="demo-launch"
+          onClick={() => {
+            voice.setOpen(false)
+            setDemoRunning(true)
+            setAnnouncement('Guided demo starting. It runs both tasks automatically and needs no microphone.')
+          }}
+        >
+          <PlayCircle size={17} aria-hidden="true" />
+          Experience SIGHTLINE
+          <span className="demo-launch__note">Guided demo</span>
+        </button>
+      )}
+
+      <DemoController running={demoRunning} onExit={() => setDemoRunning(false)} />
 
       <button
         type="button"

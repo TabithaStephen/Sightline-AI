@@ -396,22 +396,50 @@ export function fieldHelp(key: FieldKey): string {
   }
 }
 
-/** Explains a real validation error and how to fix it. */
-export function errorHelp(key: FieldKey, message: string): string {
-  const fix: Record<FieldKey, string> = {
-    fullName: 'Move to the full name field and type the name as it is printed on the identification you will travel with.',
-    email: 'Move to the email field and enter an address with an at sign and a dot in it, like asha.menon@example.com.',
-    phone: 'Move to the phone field and enter ten digits, or a plus sign and a country code followed by the number.',
+/**
+ * Explains one specific problem, conversationally — never the whole rule set
+ * for the field. Distinguishes "you have not filled this in" from "what is
+ * here does not look right", because the fix is different.
+ */
+export function specificErrorHelp(key: FieldKey, value: string): string {
+  const empty = value.trim().length === 0
+  switch (key) {
+    case 'fullName':
+      return empty
+        ? "You haven't entered your full name yet. Say it, or type it into the full name field."
+        : "That name doesn't look complete. Please check it — letters, spaces, hyphens and full stops only."
+    case 'email':
+      return empty
+        ? "You haven't entered an email address yet."
+        : "That email address doesn't appear to be valid. Please check that it contains a complete address, with an at sign and a dot."
+    case 'phone':
+      return empty
+        ? "You haven't entered a phone number yet."
+        : 'The phone number appears incomplete. Please check the digits.'
+    default:
+      return 'Please check that field.'
   }
-  return `There is a problem with ${FIELD_LABEL[key].toLowerCase()}. ${message} ${fix[key]}`
 }
 
-/** Spoken summary of every outstanding validation error. */
-export function errorSummarySpeech(errors: Array<[FieldKey, string]>): string {
-  if (errors.length === 0) return 'Every field is filled in correctly.'
-  const intro =
-    errors.length === 1
-      ? 'One detail needs your attention.'
-      : `${errors.length} details need your attention.`
-  return join([intro, ...errors.map(([key, message]) => errorHelp(key, message)), 'Nothing has been submitted.'])
+/** Kept for the per-field Explain button, which asks for the full guidance. */
+export function errorHelp(key: FieldKey, value: string): string {
+  return specificErrorHelp(key, value)
+}
+
+/**
+ * Narrates the errors that are actually outstanding, leading with one specific
+ * problem rather than rereading every rule on the form.
+ */
+export function errorSummarySpeech(errors: Array<[FieldKey, string]>, passenger: Passenger): string {
+  if (errors.length === 0) return 'Everything looks right.'
+  const [firstKey] = errors[0]
+  const first = specificErrorHelp(firstKey, passenger[firstKey])
+  if (errors.length === 1) return join([first, 'Nothing has been submitted.'])
+  const others = errors.slice(1).map(([key]) => FIELD_LABEL[key].toLowerCase())
+  return join([
+    `${errors.length} details need your attention. Starting with ${FIELD_LABEL[firstKey].toLowerCase()}:`,
+    first,
+    `Then check ${others.join(' and ')}.`,
+    'Nothing has been submitted.',
+  ])
 }

@@ -1,0 +1,233 @@
+/* ==========================================================================
+   SIGHTLINE — guided demo, scenario switch and student application extras
+   Same dark editorial system: hairlines, champagne accent, no new palette.
+   ========================================================================== */
+
+/* ====================================================== Scenario switch */
+
+.scenario-switch {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  flex: none;
+}
+
+.scenario-switch__btn {
+  min-height: 2.5rem;
+  padding: 0.35rem 0.95rem;
+  border: 0;
+  background: transparent;
+  color: var(--grey);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 200ms var(--ease-out),
+    color 200ms var(--ease-out);
+}
+
+.scenario-switch__btn:hover {
+  color: var(--ivory);
+  background: var(--elevated);
+}
+
+.scenario-switch__btn[aria-pressed='true'] {
+  background: var(--champagne);
+  color: var(--obsidian);
+  font-weight: 500;
+}
+
+/* ======================================================== Demo launcher */
+
+.demo-launch {
+  position: fixed;
+  left: clamp(1rem, 3vw, 2.5rem);
+  bottom: clamp(1rem, 3vw, 2.5rem);
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 3.5rem;
+  padding: 0.7rem 1.4rem;
+  border: 1px solid var(--champagne);
+  border-radius: 999px;
+  background: var(--champagne);
+  color: var(--obsidian);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  transition:
+    background-color 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+
+.demo-launch:hover {
+  background: var(--champagne-bright);
+  transform: translateY(-2px);
+}
+
+.demo-launch__note {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  padding-left: 0.6rem;
+  border-left: 1px solid rgba(16, 17, 18, 0.3);
+}
+
+/* ============================================================ Demo bar */
+
+.demo-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  border-top: 1px solid var(--line);
+  background: rgba(28, 29, 31, 0.97);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.5);
+  animation: rise 320ms var(--ease-out) both;
+}
+
+.demo-bar:focus {
+  outline: none;
+}
+
+.demo-bar__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-block: 1rem 0;
+}
+
+.demo-bar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.demo-bar__body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  padding-bottom: 1rem;
+}
+
+.demo-bar__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.demo-bar__title {
+  font-size: 1.1875rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ivory);
+}
+
+.demo-bar__transcript {
+  font-size: 0.9375rem;
+  color: var(--champagne-bright);
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.demo-bar__controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.demo-progress {
+  height: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.demo-progress__fill {
+  display: block;
+  height: 100%;
+  background: var(--champagne);
+  transition: width 400ms var(--ease-out);
+}
+
+/* ============================================ Student application extras */
+
+.doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.chip--missing {
+  border-color: rgba(227, 167, 155, 0.4);
+  background: var(--alert-wash);
+  color: var(--alert);
+}
+
+.rail__list--seven {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+/* ========================================================== Responsive */
+
+@media (max-width: 68rem) {
+  .rail__list--seven {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 52rem) {
+  .rail__list--seven {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 40rem) {
+  .demo-launch {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    justify-content: center;
+  }
+
+  .demo-bar__body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .demo-bar__controls .btn {
+    flex: 1 1 8rem;
+  }
+
+  .rail__list--seven {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scenario-switch__btn {
+    padding: 0.35rem 0.7rem;
+  }
+}
+
+/* The demo bar and the launcher both sit over the page; keep the footer clear. */
+.app:has(.demo-bar) .footer {
+  padding-bottom: 9rem;
+}

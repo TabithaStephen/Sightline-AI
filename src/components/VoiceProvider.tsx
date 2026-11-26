@@ -8,6 +8,7 @@ import {
   synthesisSupported,
   type SpeechRecognitionLike,
 } from '../lib/speech'
+import { beep } from '../lib/beep'
 import {
   answerChoiceQuestion,
   describeNext,
@@ -32,6 +33,17 @@ export interface VoiceActions {
 
 export type VoiceContextInput = NarrationInput & VoiceActions
 
+/**
+ * A second workflow can take over the companion's narration while it is on
+ * screen, so "explain this screen" always describes the task the user is in.
+ */
+export interface NarrationOverride {
+  explain: () => string
+  next: () => string
+  intro: () => string
+  stageKey: () => string
+}
+
 interface VoiceApi {
   status: VoiceStatus
   open: boolean
@@ -44,7 +56,11 @@ interface VoiceApi {
   canListen: boolean
   setOpen: (open: boolean) => void
   setGuided: (guided: boolean) => void
-  speak: (text: string) => void
+  speak: (text: string, onDone?: () => void) => void
+  /** Speaks, chimes, then opens the microphone. Used by Guided Mode. */
+  speakThenListen: (text: string) => void
+  /** Speaks only if this key was not the last thing said, to avoid repeats. */
+  speakOnce: (key: string, text: string) => void
   stop: () => void
   replay: () => void
   toggleListening: () => void
@@ -57,6 +73,17 @@ interface VoiceApi {
   dictatingInto: string | null
   setDictatingInto: (id: string | null) => void
   publish: (input: VoiceContextInput) => void
+  setNarrationOverride: (override: NarrationOverride | null) => void
+  /** Lets the Guided Demo drive the orb's state directly. */
+  setDemoPhase: (phase: VoiceStatus | null) => void
+  /** Tells the companion a new stage has been reached, in any workflow. */
+  notifyStage: (key: string) => void
+  /**
+   * Lets the screen in focus claim speech that is not a command, so a spoken
+   * answer can fill the field the user is on. Returns a confirmation sentence,
+   * or null to let the companion treat it as an unknown command.
+   */
+  setSpeechSink: (sink: ((text: string) => string | null) | null) => void
 }
 
 const VoiceCtx = createContext<VoiceApi | null>(null)
@@ -86,6 +113,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [caption, setCaption] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [dictatingInto, setDictatingInto] = useState<string | null>(null)
+  const [demoPhase, setDemoPhase] = useState<VoiceStatus | null>(null)
 
   const canSpeak = useMemo(() => synthesisSupported(), [])
   const canListen = useMemo(() => recognitionSupported(), [])
@@ -96,6 +124,10 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const dictationTargetRef = useRef<((text: string) => void) | null>(null)
   const lastSpokenRef = useRef('')
+  const lastKeyRef = useRef('')
+  const speechSeq = useRef(0)
+  const sinkRef = useRef<((text: string) => string | null) | null>(null)
+  const overrideRef = useRef<NarrationOverride | null>(null)
   const guidedRef = useRef(guided)
   const stepRef = useRef<string>('')
 
@@ -103,46 +135,71 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   /* ------------------------------------------------------------- Speaking */
 
   const stop = useCallback(() => {
+    // Bumping the sequence cancels any queued follow-up (the chime, the
+    // listening prompt, the next demo step) along with the speech itself.
+    speechSeq.current += 1
     cancelSpeech()
     setStatus((current) => (current === 'speaking' || current === 'processing' ? 'idle' : current))
   }, [])
 
   const speak = useCallback(
-    (text: string) => {
+    (text: string, onDone?: () => void) => {
       const clean = text.trim()
       if (!clean) return
       lastSpokenRef.current = clean
       setCaption(clean)
       setError(null)
 
+      // Never let two responses overlap: a new one always cancels the old.
+      speechSeq.current += 1
+      const seq = speechSeq.current
+      const finish = () => {
+        if (speechSeq.current !== seq) return
+        setStatus((c) => (c === 'speaking' || c === 'processing' ? 'idle' : c))
+        onDone?.()
+      }
+
       if (!canSpeak) {
-        // No synthesis in this browser: the caption is the whole response.
+        // No synthesis in this browser: the caption carries the whole response,
+        // and anything chained after it still runs so nothing can get stuck.
         setStatus('idle')
+        window.setTimeout(finish, Math.min(600 + clean.length * 22, 9000))
         return
       }
 
-      // Never let two responses overlap.
       cancelSpeech()
       setStatus('processing')
 
       // Chrome drops an utterance queued in the same tick as cancel().
       window.setTimeout(() => {
+        if (speechSeq.current !== seq) return
         const utterance = new SpeechSynthesisUtterance(clean)
         const voice = pickVoice()
         if (voice) utterance.voice = voice
         utterance.rate = 1
         utterance.pitch = 1
-        utterance.onstart = () => setStatus('speaking')
-        utterance.onend = () => setStatus((c) => (c === 'speaking' || c === 'processing' ? 'idle' : c))
-        utterance.onerror = () => setStatus((c) => (c === 'speaking' || c === 'processing' ? 'idle' : c))
+        utterance.onstart = () => {
+          if (speechSeq.current === seq) setStatus('speaking')
+        }
+        utterance.onend = finish
+        utterance.onerror = finish
         try {
           window.speechSynthesis.speak(utterance)
         } catch {
-          setStatus('idle')
+          finish()
         }
       }, 60)
     },
     [canSpeak],
+  )
+
+  const speakOnce = useCallback(
+    (key: string, text: string) => {
+      if (lastKeyRef.current === key) return
+      lastKeyRef.current = key
+      speak(text)
+    },
+    [speak],
   )
 
   const replay = useCallback(() => {
@@ -151,8 +208,14 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
 
   /* ------------------------------------------------------- Narration verbs */
 
-  const explainCurrentScreen = useCallback(() => speak(explainScreen(inputRef.current)), [speak])
-  const describeNextSteps = useCallback(() => speak(describeNext(inputRef.current)), [speak])
+  const explainCurrentScreen = useCallback(
+    () => speak(overrideRef.current ? overrideRef.current.explain() : explainScreen(inputRef.current)),
+    [speak],
+  )
+  const describeNextSteps = useCallback(
+    () => speak(overrideRef.current ? overrideRef.current.next() : describeNext(inputRef.current)),
+    [speak],
+  )
   const readFlightOptions = useCallback(() => {
     const input = inputRef.current
     if (input.step !== 'results') {
@@ -258,6 +321,15 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
+      // Not a command: offer it to the screen in focus, so a spoken answer can
+      // fill the field the user is on. Filling a field is never consequential —
+      // nothing is submitted or confirmed by speech.
+      const claimed = sinkRef.current?.(heard)
+      if (claimed) {
+        speak(claimed)
+        return
+      }
+
       speak(
         `I did not recognise "${heard}" as a command. ${helpText(input)} I will never choose a flight, fill in your details or confirm a booking from speech on my own.`,
       )
@@ -266,6 +338,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   )
 
   /* ------------------------------------------------------------ Listening */
+
+  const startRecognitionRef = useRef<((mode: 'command' | 'dictation') => void) | null>(null)
 
   const stopListening = useCallback(() => {
     try {
@@ -353,6 +427,10 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     [canListen, runCommand],
   )
 
+  useEffect(() => {
+    startRecognitionRef.current = startRecognition
+  }, [startRecognition])
+
   const toggleListening = useCallback(() => {
     if (status === 'listening') {
       stopListening()
@@ -367,6 +445,41 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       startRecognition('dictation')
     },
     [startRecognition],
+  )
+
+  const setSpeechSink = useCallback((sink: ((text: string) => string | null) | null) => {
+    sinkRef.current = sink
+  }, [])
+
+  const setNarrationOverride = useCallback((override: NarrationOverride | null) => {
+    overrideRef.current = override
+    // Force the next stage notification to be treated as a change, so moving
+    // between workflows always re-introduces where the user has landed.
+    stepRef.current = ''
+  }, [])
+
+  /**
+   * The Guided Mode rhythm: explain, chime, invite, then open the microphone.
+   * Every link in the chain is cancelled by Stop speaking, and if speech input
+   * is unavailable it says so and leaves the microphone button to the user.
+   */
+  const speakThenListen = useCallback(
+    (text: string) => {
+      if (!canListen) {
+        speak(
+          `${text} Speech input is not available in this browser, so use the buttons or the keyboard — or the microphone button if you enable it.`,
+        )
+        return
+      }
+      speak(text, () => {
+        void beep().then(() => {
+          speak("You can speak now. Tell me what you'd like to do, and I'll help you fill in the details.", () => {
+            startRecognitionRef.current?.('command')
+          })
+        })
+      })
+    },
+    [canListen, speak],
   )
 
   /* -------------------------------------------------------- Panel + guided */
@@ -385,13 +498,18 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const setGuided = useCallback(
     (next: boolean) => {
       setGuidedState(next)
-      if (next) speak(`Guided mode on. ${stageIntro(inputRef.current)}`)
+      if (next) {
+        const override = overrideRef.current
+        speakThenListen(
+          `Guided mode on. ${override ? `${override.intro()} ${override.next()}` : `${stageIntro(inputRef.current)} ${describeNext(inputRef.current)}`}`,
+        )
+      }
       else {
         stop()
         setCaption('Guided mode off.')
       }
     },
-    [speak, stop],
+    [speakThenListen, stop],
   )
 
   useEffect(() => {
@@ -402,18 +520,31 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   // the live state, it notices when the user has moved to a new stage: Guided
   // Mode then speaks one short, interruptible introduction. It never reads out
   // the whole screen on arrival.
+  const notifyStage = useCallback(
+    (key: string) => {
+      if (stepRef.current === key) return
+      const first = stepRef.current === ''
+      stepRef.current = key
+      lastKeyRef.current = ''
+      if (first || !guidedRef.current) return
+      const override = overrideRef.current
+      const text = override
+        ? `${override.intro()} ${override.next()}`
+        : `${stageIntro(inputRef.current)} ${describeNext(inputRef.current)}`
+      speakThenListen(text)
+    },
+    [speakThenListen],
+  )
+
   const publish = useCallback(
     (next: VoiceContextInput) => {
       inputRef.current = next
-      if (stepRef.current === '') {
-        stepRef.current = next.step
-        return
-      }
-      if (stepRef.current === next.step) return
-      stepRef.current = next.step
-      if (guidedRef.current) speak(stageIntro(next))
+      // While another workflow owns the narration, its own stage notifications
+      // drive Guided Mode; the flight step underneath must stay quiet.
+      if (overrideRef.current) return
+      notifyStage(next.step)
     },
-    [speak],
+    [notifyStage],
   )
 
   // Stop any speech when the page is closed or hidden.
@@ -431,7 +562,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const api: VoiceApi = {
-    status,
+    // During the Guided Demo the orb follows the demo's own phases.
+    status: demoPhase ?? status,
     open,
     guided,
     transcript,
@@ -443,6 +575,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     setOpen,
     setGuided,
     speak,
+    speakThenListen,
+    speakOnce,
     stop,
     replay,
     toggleListening,
@@ -454,6 +588,10 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     dictatingInto,
     setDictatingInto,
     publish,
+    setSpeechSink,
+    setNarrationOverride,
+    notifyStage,
+    setDemoPhase,
   }
 
   return <VoiceCtx.Provider value={api}>{children}</VoiceCtx.Provider>

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, CircleAlert, Mic, Volume2 } from 'lucide-react'
 import { useVoice } from './VoiceProvider'
 import { cityName } from '../data/airports'
@@ -51,12 +51,33 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
   const voice = useVoice()
   const { flight: f } = flight
 
+  const focusedRef = useRef<FieldKey | null>(null)
+  const passengerRef = useRef(passenger)
+  const onChangeRef = useRef(onChange)
+  focusedRef.current = focused
+  passengerRef.current = passenger
+  onChangeRef.current = onChange
+
   // Form guardian: when a field takes focus it becomes the subject of the
   // on-screen guidance, and Guided Mode speaks the longer explanation.
   function handleFocus(key: FieldKey) {
     setFocused(key)
-    if (voice.guided) voice.speak(fieldHelp(key))
+    if (voice.guided) voice.speakOnce(`field:${key}`, fieldHelp(key))
   }
+
+  // While this form is on screen, speech that is not a command fills the field
+  // in focus. It is only ever a fill — the form is never submitted by voice.
+  useEffect(() => {
+    voice.setSpeechSink((text) => {
+      const key = focusedRef.current
+      if (!key) return null
+      const value = key === 'email' ? text.replace(/\s+at\s+/gi, '@').replace(/\s+dot\s+/gi, '.').replace(/\s+/g, '') : key === 'phone' ? text.replace(/\D/g, '') : text
+      onChangeRef.current({ ...passengerRef.current, [key]: value })
+      setErrors((current) => ({ ...current, [key]: undefined }))
+      return `I heard "${text}". I have put ${value} in the ${FIELD_LABELS[key].toLowerCase()} field. Check it, then move on when you are ready — I will not submit the form for you.`
+    })
+    return () => voice.setSpeechSink(null)
+  }, [voice])
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -67,7 +88,7 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
       requestAnimationFrame(() => summaryRef.current?.focus())
       const entries = Object.entries(found).filter(([, value]) => Boolean(value)) as Array<[FieldKey, string]>
       // Speak the real validation state, never a generic failure message.
-      voice.speak(errorSummarySpeech(entries))
+      voice.speak(errorSummarySpeech(entries, passenger))
       return
     }
     setShowSummary(false)
@@ -106,7 +127,7 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
         <button
           type="button"
           className="mic-btn"
-          onClick={() => voice.speak(errors[key] ? errorHelp(key, errors[key]!) : fieldHelp(key))}
+          onClick={() => voice.speak(errors[key] ? errorHelp(key, passenger[key]) : fieldHelp(key))}
         >
           <Volume2 size={13} aria-hidden="true" />
           Explain
