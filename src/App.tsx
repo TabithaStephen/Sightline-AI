@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { RotateCcw, Type } from 'lucide-react'
+import { Headphones, RotateCcw, Type } from 'lucide-react'
 import AssistPanel from './components/AssistPanel'
+import VoiceCompanion from './components/VoiceCompanion'
+import { useVoice, usePublishVoiceContext, VoiceProvider, type VoiceActions } from './components/VoiceProvider'
 import Confirmation from './components/Confirmation'
 import FlightResults from './components/FlightResults'
 import Interpretation from './components/Interpretation'
@@ -13,6 +15,7 @@ import { searchFlights } from './lib/search'
 import TaskEntry from './components/TaskEntry'
 import type { Passenger, Step, TripRequest } from './types'
 import './App.css'
+import './voice.css'
 
 type TextSize = 'standard' | 'large' | 'xlarge'
 
@@ -51,6 +54,14 @@ function readStoredTextSize(): TextSize {
 }
 
 export default function App() {
+  return (
+    <VoiceProvider>
+      <Workflow />
+    </VoiceProvider>
+  )
+}
+
+function Workflow() {
   const [step, setStep] = useState<Step>('entry')
   const [requestText, setRequestText] = useState('')
   const [request, setRequest] = useState<TripRequest | null>(null)
@@ -104,6 +115,72 @@ export default function App() {
     compared: result?.matches.filter((m) => compareIds.includes(m.flight.id)) ?? [],
     passenger,
     bookingRef,
+  })
+
+  const voice = useVoice()
+
+  // What the companion is allowed to do here. Anything consequential — picking
+  // a flight, submitting the form, confirming the booking — is deliberately
+  // left to the on-screen control, never to a spoken command.
+  const voiceActions: VoiceActions = (() => {
+    switch (step) {
+      case 'interpret':
+        return {
+          onBack: () => setStep('entry'),
+          backLabel: 'your request',
+          onContinue: handleShowResults,
+          continueLabel: 'the flight results',
+        }
+      case 'results':
+        return {
+          onBack: () => setStep('interpret'),
+          backLabel: 'the check screen',
+          onContinue: selected
+            ? () => {
+                setStep('passenger')
+                setAnnouncement('Now enter the passenger details. Nothing is booked yet.')
+              }
+            : undefined,
+          continueLabel: 'passenger details',
+          continueBlockedReason:
+            'No flight is selected yet, so there is nothing to continue with. Choose Select this flight on the option you want, then ask me to continue.',
+        }
+      case 'passenger':
+        return {
+          onBack: () => setStep('results'),
+          backLabel: 'the flight list',
+          continueBlockedReason:
+            'I will not submit the form for you. Choose Review booking on screen and I will read out anything that needs fixing.',
+        }
+      case 'review':
+        return {
+          onBack: () => setStep('passenger'),
+          backLabel: 'passenger details',
+          continueBlockedReason:
+            'Confirming is your decision to make, so I will not do it from a spoken command. Use the Confirm demo booking button on screen.',
+        }
+      case 'confirmation':
+        return {
+          continueBlockedReason:
+            'The task is finished. Choose Start a new search to run it again with a different request.',
+        }
+      default:
+        return {
+          continueBlockedReason:
+            'Type or dictate the flight you need first, then choose Understand my request.',
+        }
+    }
+  })()
+
+  usePublishVoiceContext({
+    step,
+    request,
+    result,
+    selected,
+    compared: result?.matches.filter((m) => compareIds.includes(m.flight.id)) ?? [],
+    passenger,
+    bookingRef,
+    ...voiceActions,
   })
 
   function handleRequest(text: string) {
@@ -222,6 +299,25 @@ export default function App() {
                 ))}
               </div>
             </div>
+
+            <button
+              type="button"
+              className="guided-toggle"
+              aria-pressed={voice.guided}
+              onClick={() => {
+                const next = !voice.guided
+                voice.setGuided(next)
+                setAnnouncement(
+                  next
+                    ? 'Guided mode on. Each step will be introduced aloud when you reach it.'
+                    : 'Guided mode off.',
+                )
+              }}
+            >
+              <span className="guided-toggle__led" aria-hidden="true" />
+              Guided mode
+              <span className="visually-hidden">{voice.guided ? ' (on)' : ' (off)'}</span>
+            </button>
 
             {!isEntry && (
               <button type="button" className="btn btn--quiet" onClick={handleRestart}>
@@ -347,6 +443,28 @@ export default function App() {
 
         {!isEntry && <AssistPanel content={assist} />}
       </div>
+
+      <button
+        type="button"
+        className="voice-dock"
+        onClick={() => voice.setOpen(true)}
+        aria-haspopup="dialog"
+      >
+        <span className="orb" aria-hidden="true" style={{ width: '2.25rem' }}>
+          <span className="orb__blob orb__blob--a" />
+          <span className="orb__blob orb__blob--b" />
+          <span className="orb__core" />
+        </span>
+        <span className="voice-dock__label">
+          <span className="voice-dock__title">Voice companion</span>
+          <span className="voice-dock__state">
+            {voice.status === 'idle' ? 'Ask about this screen' : voice.status}
+          </span>
+        </span>
+        <Headphones size={16} aria-hidden="true" />
+      </button>
+
+      <VoiceCompanion step={step} />
 
       <p aria-live="polite" role="status" className="visually-hidden">
         {announcement}

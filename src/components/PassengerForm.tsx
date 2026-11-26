@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, CircleAlert } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CircleAlert, Mic, Volume2 } from 'lucide-react'
+import { useVoice } from './VoiceProvider'
 import { cityName } from '../data/airports'
 import { clockToHuman, rupees } from '../lib/format'
+import { FIELD_HINT, errorHelp, errorSummarySpeech, fieldHelp } from '../lib/narrate'
 import type { Passenger, RankedFlight } from '../types'
 
 interface Props {
@@ -44,8 +46,17 @@ export function validatePassenger(passenger: Passenger): Partial<Record<FieldKey
 export default function PassengerForm({ passenger, flight, onChange, onSubmit, onBack }: Props) {
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({})
   const [showSummary, setShowSummary] = useState(false)
+  const [focused, setFocused] = useState<FieldKey | null>(null)
   const summaryRef = useRef<HTMLDivElement>(null)
+  const voice = useVoice()
   const { flight: f } = flight
+
+  // Form guardian: when a field takes focus it becomes the subject of the
+  // on-screen guidance, and Guided Mode speaks the longer explanation.
+  function handleFocus(key: FieldKey) {
+    setFocused(key)
+    if (voice.guided) voice.speak(fieldHelp(key))
+  }
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -54,6 +65,9 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
     if (Object.keys(found).length > 0) {
       setShowSummary(true)
       requestAnimationFrame(() => summaryRef.current?.focus())
+      const entries = Object.entries(found).filter(([, value]) => Boolean(value)) as Array<[FieldKey, string]>
+      // Speak the real validation state, never a generic failure message.
+      voice.speak(errorSummarySpeech(entries))
       return
     }
     setShowSummary(false)
@@ -81,11 +95,45 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
         value={passenger[key]}
         aria-describedby={errors[key] ? `${key}-hint ${key}-error` : `${key}-hint`}
         aria-invalid={errors[key] ? 'true' : undefined}
+        onFocus={() => handleFocus(key)}
         onChange={(event) => {
           onChange({ ...passenger, [key]: event.target.value })
           if (errors[key]) setErrors({ ...errors, [key]: undefined })
         }}
       />
+
+      <div className="field__tools">
+        <button
+          type="button"
+          className="mic-btn"
+          onClick={() => voice.speak(errors[key] ? errorHelp(key, errors[key]!) : fieldHelp(key))}
+        >
+          <Volume2 size={13} aria-hidden="true" />
+          Explain
+          <span className="visually-hidden"> the {FIELD_LABELS[key].toLowerCase()} field</span>
+        </button>
+        {voice.canListen && (
+          <button
+            type="button"
+            className="mic-btn"
+            aria-pressed={voice.dictatingInto === key}
+            disabled={voice.dictatingInto !== null && voice.dictatingInto !== key}
+            onClick={() => {
+              voice.setDictatingInto(key)
+              voice.dictate((text) => {
+                // Dictation only fills the field. It never submits the form.
+                onChange({ ...passenger, [key]: text })
+                setErrors((current) => ({ ...current, [key]: undefined }))
+              })
+            }}
+          >
+            <Mic size={13} aria-hidden="true" />
+            {voice.dictatingInto === key ? 'Listening' : 'Dictate'}
+            <span className="visually-hidden"> into {FIELD_LABELS[key].toLowerCase()}</span>
+          </button>
+        )}
+      </div>
+
       {errors[key] && (
         <p className="field__error" id={`${key}-error`}>
           <CircleAlert size={15} aria-hidden="true" />
@@ -159,6 +207,21 @@ export default function PassengerForm({ passenger, flight, onChange, onSubmit, o
               </ul>
             </div>
           )}
+
+          <div className="guardian">
+            <p className="mono mono--accent">Field guidance</p>
+            <p className="guardian__text">
+              {focused
+                ? FIELD_HINT[focused]
+                : 'Move to a field and this line explains what belongs in it and the format it expects. Each field also has an Explain button, and a Dictate button where your browser supports speech.'}
+            </p>
+            {focused && errors[focused] && (
+              <p className="field__error">
+                <CircleAlert size={15} aria-hidden="true" />
+                {errors[focused]}
+              </p>
+            )}
+          </div>
 
           <div className="field-grid">
             {field(

@@ -1,4 +1,7 @@
-import { ArrowLeft, ArrowRight, Check, CircleAlert, Star } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowLeft, ArrowRight, Check, CircleAlert, ListOrdered, Star, Volume2 } from 'lucide-react'
+import { useVoice } from './VoiceProvider'
+import { answerChoiceQuestion, readOptions } from '../lib/narrate'
 import { cityName } from '../data/airports'
 import { clockToHuman, minutesToHuman, minutesToShort, rupees, stopsLabel } from '../lib/format'
 import { recommendationSummary } from '../lib/search'
@@ -278,6 +281,82 @@ function tradeOffSentences(items: RankedFlight[], recommendedId: string | null):
   return lines
 }
 
+type ChoiceId = 'cheapest' | 'fastest' | 'stops' | 'tradeoff' | 'recommended'
+
+const CHOICE_QUESTIONS: Array<{ id: ChoiceId; label: string }> = [
+  { id: 'cheapest', label: 'Which is cheapest?' },
+  { id: 'fastest', label: 'Which is fastest?' },
+  { id: 'stops', label: 'Which has the fewest stops?' },
+  { id: 'tradeoff', label: 'What am I giving up if I go cheaper?' },
+  { id: 'recommended', label: 'Why is the first one recommended?' },
+]
+
+/**
+ * Decision support built from the flights actually on screen. Each answer is
+ * generated from the same ranked data the list renders, shown as text and read
+ * aloud when the browser can speak.
+ */
+function ChoiceExplainer({ result, request }: { result: SearchResult; request: TripRequest }) {
+  const voice = useVoice()
+  const [answer, setAnswer] = useState<string | null>(null)
+
+  function ask(id: ChoiceId) {
+    const text = answerChoiceQuestion(id, result, request)
+    setAnswer(text)
+    voice.speak(text)
+  }
+
+  function readAll() {
+    const text = readOptions(result)
+    setAnswer(text)
+    voice.speak(text)
+  }
+
+  return (
+    <section className="explainer" aria-labelledby="explainer-heading">
+      <div className="stack stack--xs">
+        <p className="mono mono--accent">Help me choose</p>
+        <h2 id="explainer-heading" style={{ fontSize: '1.1875rem' }}>
+          Ask about these options
+        </h2>
+      </div>
+
+      <div className="voice-asks__row">
+        {CHOICE_QUESTIONS.map((question) => (
+          <button key={question.id} type="button" className="ask" onClick={() => ask(question.id)}>
+            {question.label}
+          </button>
+        ))}
+        <button type="button" className="ask" onClick={readAll}>
+          <ListOrdered size={14} aria-hidden="true" />
+          Read every option
+        </button>
+      </div>
+
+      {answer && (
+        <>
+          <p className="explainer__answer">{answer}</p>
+          <div className="voice-asks__row">
+            <button type="button" className="ask" onClick={() => voice.speak(answer)}>
+              <Volume2 size={14} aria-hidden="true" />
+              Read this aloud again
+            </button>
+            {(voice.status === 'speaking' || voice.status === 'processing') && (
+              <button type="button" className="ask" onClick={voice.stop}>
+                Stop speaking
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      <p className="fine">
+        Answers are worked out from the simulated flights listed below. Nothing here selects a flight for you.
+      </p>
+    </section>
+  )
+}
+
 function Comparison({
   items,
   recommendedId,
@@ -469,6 +548,8 @@ export default function FlightResults({
           </div>
         )}
       </section>
+
+      <ChoiceExplainer result={result} request={request} />
 
       {compared.length >= 2 && <Comparison items={compared} recommendedId={result.recommendedId} />}
 

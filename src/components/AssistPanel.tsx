@@ -1,6 +1,42 @@
 import { useState } from 'react'
-import { ChevronDown, Compass } from 'lucide-react'
+import { ChevronDown, Compass, Sparkles, Volume2 } from 'lucide-react'
 import type { AssistContent } from '../lib/assist'
+import { useVoice } from './VoiceProvider'
+
+/**
+ * The two contextual actions that appear at every stage: a full explanation of
+ * the current screen, and what the user can do next. Both are shown as text in
+ * the companion and spoken aloud when the browser supports it.
+ */
+function AssistActions() {
+  const voice = useVoice()
+  return (
+    <div className="assist__actions">
+      <button
+        type="button"
+        className="ask"
+        onClick={() => {
+          voice.setOpen(true)
+          voice.explainCurrentScreen()
+        }}
+      >
+        <Sparkles size={14} aria-hidden="true" />
+        Explain this screen
+      </button>
+      <button
+        type="button"
+        className="ask"
+        onClick={() => {
+          voice.setOpen(true)
+          voice.describeNextSteps()
+        }}
+      >
+        <Volume2 size={14} aria-hidden="true" />
+        What can I do here?
+      </button>
+    </div>
+  )
+}
 
 interface Props {
   content: AssistContent
@@ -51,6 +87,7 @@ export default function AssistPanel({ content, inline = false }: Props) {
           <p className="eyebrow">Guided help</p>
           <h2 id="assist-inline-heading">{content.heading}</h2>
           <p className="fine">{content.nextAction}</p>
+          <AssistActions />
         </div>
 
         <ul className="triptych">
@@ -83,6 +120,7 @@ export default function AssistPanel({ content, inline = false }: Props) {
       <div className="assist__next">
         <p className="mono mono--accent">What to do next</p>
         <p>{content.nextAction}</p>
+        <AssistActions />
       </div>
 
       <div>

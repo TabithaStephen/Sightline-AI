@@ -1,0 +1,610 @@
+/* ==========================================================================
+   SIGHTLINE — voice companion
+   Same dark editorial language: obsidian ground, ivory light, champagne glow.
+   ========================================================================== */
+
+/* ============================================================ Launch dock */
+
+.voice-dock {
+  position: fixed;
+  right: clamp(1rem, 3vw, 2.5rem);
+  bottom: clamp(1rem, 3vw, 2.5rem);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.7rem 1.35rem 0.7rem 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(28, 29, 31, 0.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  color: var(--ivory);
+  cursor: pointer;
+  min-height: 3.5rem;
+  transition:
+    border-color 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+
+.voice-dock:hover {
+  border-color: var(--champagne);
+  transform: translateY(-2px);
+}
+
+.voice-dock__label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  text-align: left;
+}
+
+.voice-dock__title {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.voice-dock__state {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--champagne);
+}
+
+/* ================================================================== Orb */
+
+.orb {
+  position: relative;
+  width: clamp(8rem, 24vw, 12rem);
+  aspect-ratio: 1;
+  flex: none;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+.orb__halo,
+.orb__blob,
+.orb__core {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.orb__halo {
+  inset: -18%;
+  background: radial-gradient(circle at 50% 50%, rgba(184, 165, 138, 0.3), transparent 62%);
+  opacity: 0.75;
+  animation: orb-breathe 6s ease-in-out infinite;
+}
+
+/* Three offset organic shapes drifting over one another read as fluid
+   movement without any video, canvas or extra dependency. */
+.orb__blob {
+  inset: 8%;
+  filter: blur(18px);
+  mix-blend-mode: screen;
+  opacity: 0.85;
+}
+
+.orb__blob--a {
+  background: radial-gradient(circle at 35% 35%, rgba(242, 240, 234, 0.55), rgba(184, 165, 138, 0.1) 60%, transparent 72%);
+  border-radius: 58% 42% 47% 53% / 52% 46% 54% 48%;
+  animation: orb-drift-a 14s ease-in-out infinite;
+}
+
+.orb__blob--b {
+  background: radial-gradient(circle at 65% 60%, rgba(184, 165, 138, 0.6), transparent 66%);
+  border-radius: 44% 56% 60% 40% / 45% 58% 42% 55%;
+  animation: orb-drift-b 18s ease-in-out infinite;
+}
+
+.orb__blob--c {
+  background: radial-gradient(circle at 50% 75%, rgba(155, 170, 155, 0.3), transparent 64%);
+  border-radius: 52% 48% 41% 59% / 60% 44% 56% 40%;
+  animation: orb-drift-c 22s ease-in-out infinite;
+}
+
+.orb__core {
+  inset: 26%;
+  background: radial-gradient(circle at 42% 38%, rgba(242, 240, 234, 0.92), rgba(184, 165, 138, 0.55) 55%, rgba(16, 17, 18, 0.1) 80%);
+  box-shadow: 0 0 60px rgba(184, 165, 138, 0.35);
+  animation: orb-breathe 6s ease-in-out infinite;
+}
+
+/* --- States ------------------------------------------------------------ */
+
+.orb--listening .orb__halo {
+  animation-duration: 1.6s;
+  opacity: 1;
+}
+
+.orb--listening .orb__core {
+  animation: orb-pulse 1.6s ease-in-out infinite;
+}
+
+.orb--listening .orb__blob--a {
+  animation-duration: 5s;
+}
+
+.orb--listening .orb__blob--b {
+  animation-duration: 6.5s;
+}
+
+.orb--processing .orb__blob--a,
+.orb--processing .orb__blob--b,
+.orb--processing .orb__blob--c {
+  animation-duration: 3.2s;
+}
+
+.orb--processing .orb__core {
+  animation: orb-breathe 1.9s ease-in-out infinite;
+}
+
+.orb--speaking .orb__core {
+  animation: orb-speak 1.1s ease-in-out infinite;
+}
+
+.orb--speaking .orb__halo {
+  animation-duration: 2.4s;
+  opacity: 1;
+}
+
+.orb--speaking .orb__blob--b {
+  animation-duration: 7s;
+}
+
+.orb--error .orb__halo,
+.orb--error .orb__core {
+  animation: none;
+}
+
+.orb--error .orb__core {
+  background: radial-gradient(circle at 42% 38%, rgba(227, 167, 155, 0.75), rgba(120, 80, 74, 0.4) 60%, transparent 80%);
+  box-shadow: 0 0 40px rgba(227, 167, 155, 0.25);
+}
+
+.orb--error .orb__blob {
+  opacity: 0.35;
+  animation-play-state: paused;
+}
+
+@keyframes orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.055);
+  }
+}
+
+@keyframes orb-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.92;
+  }
+  50% {
+    transform: scale(1.16);
+    opacity: 1;
+  }
+}
+
+@keyframes orb-speak {
+  0%,
+  100% {
+    transform: scale(1.02);
+  }
+  30% {
+    transform: scale(1.1);
+  }
+  60% {
+    transform: scale(0.98);
+  }
+}
+
+@keyframes orb-drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  33% {
+    transform: translate(5%, -4%) rotate(120deg) scale(1.06);
+  }
+  66% {
+    transform: translate(-4%, 5%) rotate(240deg) scale(0.96);
+  }
+}
+
+@keyframes orb-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translate(-6%, -5%) rotate(-180deg) scale(1.08);
+  }
+}
+
+@keyframes orb-drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1.02);
+  }
+  50% {
+    transform: translate(4%, 6%) rotate(160deg) scale(0.94);
+  }
+}
+
+/* ============================================================== Overlay */
+
+.voice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: clamp(0.75rem, 3vw, 2rem);
+  background: rgba(10, 11, 12, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: fade 240ms var(--ease-out) both;
+}
+
+.voice-panel {
+  width: min(44rem, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: clamp(1.25rem, 3vw, 2.25rem);
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--champagne);
+  border-radius: var(--radius-lg);
+  background: var(--charcoal);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
+  animation: rise 360ms var(--ease-out) both;
+}
+
+.voice-panel__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.voice-stage {
+  display: flex;
+  align-items: center;
+  gap: clamp(1.25rem, 4vw, 2.5rem);
+}
+
+.voice-state {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.voice-state__label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  letter-spacing: 0.18em;
+}
+
+.voice-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--grey);
+}
+
+.voice-dot--listening {
+  background: var(--champagne);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.voice-dot--processing {
+  background: var(--ivory-dim);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.voice-dot--speaking {
+  background: var(--champagne-bright);
+}
+
+.voice-dot--error {
+  background: var(--alert);
+}
+
+.voice-transcript,
+.voice-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--obsidian);
+}
+
+.voice-caption {
+  border-left: 2px solid var(--champagne);
+}
+
+.voice-transcript__text {
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  color: var(--ivory);
+  min-height: 1.6em;
+}
+
+.voice-transcript__empty {
+  color: var(--grey-deep);
+}
+
+.voice-caption__text {
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--ivory-dim);
+  max-height: 11rem;
+  overflow-y: auto;
+}
+
+.voice-controls {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.voice-asks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
+}
+
+.voice-asks__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* A quiet pill: every voice action is reachable without a microphone. */
+.ask {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--ivory-dim);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    border-color 200ms var(--ease-out),
+    color 200ms var(--ease-out),
+    background-color 200ms var(--ease-out);
+}
+
+.ask:hover {
+  border-color: var(--champagne);
+  background: var(--champagne-wash);
+  color: var(--ivory);
+}
+
+.ask svg {
+  flex: none;
+  color: var(--champagne);
+}
+
+/* ===================================================== In-page assistance */
+
+/* The "Explain this screen" pair that sits in the guided help rail. */
+.assist__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Guided mode switch in the masthead. */
+.guided-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.5rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--grey);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    border-color 200ms var(--ease-out),
+    color 200ms var(--ease-out);
+}
+
+.guided-toggle:hover {
+  border-color: var(--champagne);
+  color: var(--ivory);
+}
+
+.guided-toggle[aria-pressed='true'] {
+  border-color: var(--champagne);
+  background: var(--champagne-wash);
+  color: var(--champagne-bright);
+}
+
+.guided-toggle__led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  flex: none;
+}
+
+.guided-toggle[aria-pressed='true'] .guided-toggle__led {
+  background: var(--champagne);
+}
+
+/* Smart choice explainer on the results screen. */
+.explainer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: clamp(1.1rem, 2.5vw, 1.5rem);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--champagne);
+  border-radius: var(--radius);
+  background: var(--charcoal);
+}
+
+.explainer__answer {
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--ivory);
+  max-width: 72ch;
+}
+
+/* Form guardian panel on the passenger step. */
+.guardian {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--champagne);
+  border-radius: var(--radius);
+  background: var(--obsidian);
+}
+
+.guardian__text {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--ivory-dim);
+  max-width: 68ch;
+}
+
+.field__tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.15rem;
+}
+
+.mic-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.5rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--grey);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    border-color 200ms var(--ease-out),
+    color 200ms var(--ease-out);
+}
+
+.mic-btn:hover:not(:disabled) {
+  border-color: var(--champagne);
+  color: var(--ivory);
+}
+
+.mic-btn[aria-pressed='true'] {
+  border-color: var(--champagne);
+  background: var(--champagne-wash);
+  color: var(--champagne-bright);
+}
+
+.mic-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mic-btn svg {
+  flex: none;
+}
+
+/* ========================================================== Responsive */
+
+/* On a short window the orb gives up room first — the controls and the
+   captions matter more than the size of the animation. */
+@media (max-height: 48rem) {
+  .orb {
+    width: clamp(6rem, 16vh, 8.5rem);
+  }
+
+  .voice-panel {
+    gap: 0.85rem;
+  }
+}
+
+@media (max-width: 40rem) {
+  .voice-dock {
+    right: 0.75rem;
+    left: 0.75rem;
+    bottom: 0.75rem;
+    justify-content: center;
+  }
+
+  /* The dock spans the width here, so the page keeps clear space beneath it. */
+  .footer {
+    padding-bottom: 5rem;
+  }
+
+  .voice-stage {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .voice-state {
+    align-items: center;
+  }
+
+  .voice-controls .btn {
+    width: 100%;
+  }
+}
+
+/* Motion is decorative here: with reduced motion the orb holds a calm, still
+   state and every status is still carried by the label and the dot. */
+@media (prefers-reduced-motion: reduce) {
+  .orb__halo,
+  .orb__blob,
+  .orb__core {
+    animation: none !important;
+  }
+
+  .orb__blob {
+    opacity: 0.6;
+  }
+
+  .voice-dock:hover {
+    transform: none;
+  }
+}
